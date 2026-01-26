@@ -37,5 +37,9 @@
 *.out
 *.app
 
+# Python artifacts
+__pycache__/
+*.py[cod]
+
 # debug information files
 *.dwo
