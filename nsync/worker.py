@@ -102,7 +102,7 @@ class WorkerService:
             result_socket.send(json_dumps(result))
 
     def _process_batch(self, batch: Dict[str, Any]) -> Dict[str, Any]:
-        batch_id = batch["batch_id"]
+        task_id = batch["task_id"]
         src_base = batch["src_base"]
         dst_base = batch["dst_base"]
         paths = batch["paths"]
@@ -117,7 +117,7 @@ class WorkerService:
             if status == "success":
                 break
             retries = attempt + 1
-            warning = f"batch {batch_id} retry {retries} exit={exit_code}"
+            warning = f"task {task_id} retry {retries} exit={exit_code}"
             self.logger.warning(warning)
             errors.append(warning)
             time.sleep(2**attempt)
@@ -125,7 +125,7 @@ class WorkerService:
         result = {
             "type": "result",
             "worker_id": self.worker_id,
-            "batch_id": batch_id,
+            "task_id": task_id,
             "status": status,
             "retry_count": retries,
             "rsync_exit_code": exit_code,

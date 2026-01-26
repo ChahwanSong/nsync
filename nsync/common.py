@@ -11,7 +11,7 @@ from typing import Any, Dict, Iterable, List, Optional
 
 @dataclass(frozen=True)
 class Batch:
-    batch_id: str
+    task_id: int
     paths: List[str]
     file_count: int
     estimated_bytes: int
@@ -21,7 +21,7 @@ class Batch:
 
     def to_dict(self) -> Dict[str, Any]:
         return {
-            "batch_id": self.batch_id,
+            "task_id": self.task_id,
             "paths": self.paths,
             "file_count": self.file_count,
             "estimated_bytes": self.estimated_bytes,
@@ -34,7 +34,7 @@ class Batch:
 @dataclass
 class BatchResult:
     worker_id: str
-    batch_id: str
+    task_id: int
     status: str
     retry_count: int
     rsync_exit_code: int
@@ -45,7 +45,7 @@ class BatchResult:
     def to_dict(self) -> Dict[str, Any]:
         return {
             "worker_id": self.worker_id,
-            "batch_id": self.batch_id,
+            "task_id": self.task_id,
             "status": self.status,
             "retry_count": self.retry_count,
             "rsync_exit_code": self.rsync_exit_code,
@@ -59,8 +59,8 @@ def utc_timestamp() -> float:
     return time.time()
 
 
-def new_batch_id() -> str:
-    return uuid.uuid4().hex
+def new_task_id() -> int:
+    return uuid.uuid4().int
 
 
 def new_worker_id() -> str:

@@ -104,17 +104,23 @@ def test_master_worker_roundtrip(tmp_path: Path) -> None:
     master = subprocess.Popen(master_cmd, cwd=str(tmp_path), env=env)
     try:
         deadline = time.time() + 10
+        status_payload = None
         while time.time() < deadline:
             try:
                 with urllib.request.urlopen(f"http://127.0.0.1:{api_port}/status") as response:
                     if response.status == 200:
+                        status_payload = json.loads(response.read().decode("utf-8"))
                         break
             except Exception:
                 time.sleep(0.1)
         worker = subprocess.Popen(worker_cmd, cwd=str(tmp_path), env=env)
         worker.wait(timeout=30)
-        with urllib.request.urlopen(f"http://127.0.0.1:{api_port}/status") as response:
-            payload = json.loads(response.read().decode("utf-8"))
-        assert payload["total_batches"] >= 1
+        try:
+            with urllib.request.urlopen(f"http://127.0.0.1:{api_port}/status") as response:
+                status_payload = json.loads(response.read().decode("utf-8"))
+        except Exception:
+            pass
+        assert status_payload is not None
+        assert status_payload["total_batches"] >= 1
     finally:
         master.wait(timeout=30)

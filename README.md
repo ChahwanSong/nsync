@@ -30,6 +30,30 @@ python -m nsync.worker \
 - `GET /logs`
 - `GET /results`
 
+Example result payload (task_id is an integer):
+
+```json
+{
+  "results": [
+    {
+      "worker_id": "host-uuid",
+      "task_id": 123456789,
+      "status": "success",
+      "retry_count": 0,
+      "rsync_exit_code": 0,
+      "stats": {
+        "bytes_sent": 0,
+        "bytes_received": 0,
+        "start_ts": 0.0,
+        "end_ts": 0.0
+      },
+      "errors": [],
+      "received_ts": 0.0
+    }
+  ]
+}
+```
+
 ## Testing
 
 ```bash

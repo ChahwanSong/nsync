@@ -4,7 +4,7 @@ import os
 from dataclasses import dataclass
 from typing import Dict, Iterable, List, Set, Tuple
 
-from .common import Batch, new_batch_id, utc_timestamp
+from .common import Batch, new_task_id, utc_timestamp
 
 
 @dataclass
@@ -97,7 +97,7 @@ def build_batches(
         compressed = compress_paths(src_base, file_paths)
         batches.append(
             Batch(
-                batch_id=new_batch_id(),
+                task_id=new_task_id(),
                 paths=compressed,
                 file_count=len(current),
                 estimated_bytes=total_size,
