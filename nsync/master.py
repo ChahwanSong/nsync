@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import argparse
+import errno
 import multiprocessing
 import os
 import queue
 import signal
+import socket
 import threading
 import time
 from dataclasses import dataclass, field
@@ -24,7 +26,7 @@ class MasterState:
     completed_batches: int = 0
     failed_batches: int = 0
     start_ts: float = field(default_factory=time.time)
-    results: Dict[str, BatchResult] = field(default_factory=dict)
+    results: Dict[int, BatchResult] = field(default_factory=dict)
     warnings: List[str] = field(default_factory=list)
     errors: List[str] = field(default_factory=list)
     heartbeats: Dict[str, float] = field(default_factory=dict)
@@ -32,7 +34,7 @@ class MasterState:
 
     def record_result(self, result: BatchResult) -> None:
         with self.lock:
-            self.results[result.batch_id] = result
+            self.results[result.task_id] = result
             if result.status == "success":
                 self.completed_batches += 1
             else:
@@ -111,6 +113,7 @@ class MasterService:
         thread.start()
 
     def _start_api(self) -> None:
+        _ensure_port_available(self.config.bind_host, self.config.api_port)
         app = create_app(self.state, self.queue, self)
         config = uvicorn.Config(app, host=self.config.bind_host, port=self.config.api_port, log_level="info")
         server = uvicorn.Server(config)
@@ -119,7 +122,7 @@ class MasterService:
 
     def _batch_receiver_loop(self) -> None:
         socket = self.context.socket(zmq.PULL)
-        socket.bind(f"tcp://{self.config.bind_host}:{self.config.batch_port}")
+        _bind_socket_with_retry(socket, f"tcp://{self.config.bind_host}:{self.config.batch_port}")
         while not self.stop_event.is_set():
             try:
                 payload = socket.recv(flags=zmq.NOBLOCK)
@@ -139,7 +142,7 @@ class MasterService:
 
     def _result_receiver_loop(self) -> None:
         socket = self.context.socket(zmq.PULL)
-        socket.bind(f"tcp://{self.config.bind_host}:{self.config.result_port}")
+        _bind_socket_with_retry(socket, f"tcp://{self.config.bind_host}:{self.config.result_port}")
         while not self.stop_event.is_set():
             try:
                 payload = socket.recv(flags=zmq.NOBLOCK)
@@ -151,7 +154,7 @@ class MasterService:
                 continue
             result = BatchResult(
                 worker_id=message["worker_id"],
-                batch_id=message["batch_id"],
+                task_id=message["task_id"],
                 status=message["status"],
                 retry_count=message["retry_count"],
                 rsync_exit_code=message["rsync_exit_code"],
@@ -162,7 +165,7 @@ class MasterService:
 
     def _heartbeat_receiver_loop(self) -> None:
         socket = self.context.socket(zmq.PULL)
-        socket.bind(f"tcp://{self.config.bind_host}:{self.config.heartbeat_port}")
+        _bind_socket_with_retry(socket, f"tcp://{self.config.bind_host}:{self.config.heartbeat_port}")
         while not self.stop_event.is_set():
             try:
                 payload = socket.recv(flags=zmq.NOBLOCK)
@@ -176,7 +179,7 @@ class MasterService:
 
     def _claim_server_loop(self) -> None:
         socket = self.context.socket(zmq.REP)
-        socket.bind(f"tcp://{self.config.bind_host}:{self.config.claim_port}")
+        _bind_socket_with_retry(socket, f"tcp://{self.config.bind_host}:{self.config.claim_port}")
         while not self.stop_event.is_set():
             try:
                 payload = socket.recv(flags=zmq.NOBLOCK)
@@ -255,6 +258,34 @@ def create_app(state: MasterState, queue_ref: queue.Queue[Batch], service: Maste
             return {"results": [result.to_dict() for result in state.results.values()]}
 
     return app
+
+
+def _bind_socket_with_retry(socket_obj: zmq.Socket, endpoint: str, retries: int = 3, delay: float = 0.2) -> None:
+    for attempt in range(retries):
+        try:
+            socket_obj.bind(endpoint)
+            return
+        except zmq.ZMQError as exc:
+            if exc.errno != errno.EADDRINUSE or attempt >= retries - 1:
+                raise
+            time.sleep(delay)
+
+
+def _ensure_port_available(host: str, port: int, retries: int = 3, delay: float = 0.2) -> None:
+    last_error: Optional[OSError] = None
+    for attempt in range(retries):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            try:
+                sock.bind((host, port))
+                return
+            except OSError as exc:
+                last_error = exc
+                if exc.errno != errno.EADDRINUSE or attempt >= retries - 1:
+                    raise
+        time.sleep(delay)
+    if last_error:
+        raise last_error
 
 
 def _producer_main(config: MasterConfig, bucket_index: int, files: List[Dict[str, Any]]) -> None:
