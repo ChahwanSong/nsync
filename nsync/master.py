@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import errno
+import logging
 import multiprocessing
 import os
 import queue
@@ -9,7 +10,8 @@ import signal
 import socket
 import threading
 import time
-from dataclasses import dataclass, field
+from collections import deque
+from dataclasses import dataclass, field, replace
 from typing import Any, Dict, List, Optional
 
 import uvicorn
@@ -18,6 +20,7 @@ from fastapi import FastAPI
 
 from .batcher import FileInfo, build_batches, bucketize, scan_paths
 from .common import Batch, BatchResult, configure_logger, json_loads, json_dumps
+from .constants import MAX_RESULT_HISTORY
 
 
 @dataclass
@@ -25,18 +28,32 @@ class MasterState:
     total_batches: int = 0
     completed_batches: int = 0
     failed_batches: int = 0
+    completed_files: int = 0
+    completed_directories: int = 0
+    completed_bytes: int = 0
+    task_id_seq: int = 0
     start_ts: float = field(default_factory=time.time)
     results: Dict[int, BatchResult] = field(default_factory=dict)
+    result_order: deque[int] = field(default_factory=deque)
     warnings: List[str] = field(default_factory=list)
     errors: List[str] = field(default_factory=list)
     heartbeats: Dict[str, float] = field(default_factory=dict)
     lock: threading.Lock = field(default_factory=threading.Lock)
+    max_results: int = MAX_RESULT_HISTORY
 
     def record_result(self, result: BatchResult) -> None:
         with self.lock:
             self.results[result.task_id] = result
+            self.result_order.append(result.task_id)
+            while len(self.result_order) > self.max_results:
+                expired = self.result_order.popleft()
+                self.results.pop(expired, None)
             if result.status == "success":
                 self.completed_batches += 1
+                stats = result.stats or {}
+                self.completed_files += int(stats.get("file_count", 0) or 0)
+                self.completed_directories += int(stats.get("directory_count", 0) or 0)
+                self.completed_bytes += int(stats.get("estimated_bytes", 0) or 0)
             else:
                 self.failed_batches += 1
             if result.errors:
@@ -54,6 +71,11 @@ class MasterState:
         with self.lock:
             self.heartbeats[worker_id] = time.time()
 
+    def next_task_id(self) -> int:
+        with self.lock:
+            self.task_id_seq += 1
+            return self.task_id_seq
+
 
 @dataclass
 class MasterConfig:
@@ -70,12 +92,18 @@ class MasterConfig:
     heartbeat_port: int
     api_port: int
     exit_when_done: bool
+    debug: bool
+    queue_threshold: int
+    log_file: Optional[str]
 
 
 class MasterService:
     def __init__(self, config: MasterConfig) -> None:
         self.config = config
-        self.logger = configure_logger("nsync.master")
+        log_level = logging.DEBUG if config.debug else logging.INFO
+        self.logger = configure_logger(
+            "nsync.master", log_level, pretty=True, log_file=config.log_file
+        )
         self.context = zmq.Context.instance()
         self.state = MasterState()
         self.queue: queue.Queue[Batch] = queue.Queue()
@@ -83,6 +111,10 @@ class MasterService:
         self.producers_done = 0
         self.producers_total = config.num_master_processes
         self.done_flag = threading.Event()
+        self.last_progress_log = 0.0
+        self.progress_interval = 5.0
+        self.last_backpressure_log = 0.0
+        self.backpressure_interval = 5.0
 
     def start(self) -> None:
         self._start_batch_receiver()
@@ -90,6 +122,15 @@ class MasterService:
         self._start_heartbeat_receiver()
         self._start_claim_server()
         self._start_api()
+        self.logger.info(
+            "master_started",
+            {
+                "src": self.config.src,
+                "dst": self.config.dst,
+                "num_master_processes": self.config.num_master_processes,
+                "queue_threshold": self.config.queue_threshold,
+            },
+        )
 
     def stop(self) -> None:
         self.stop_event.set()
@@ -115,14 +156,18 @@ class MasterService:
     def _start_api(self) -> None:
         _ensure_port_available(self.config.bind_host, self.config.api_port)
         app = create_app(self.state, self.queue, self)
-        config = uvicorn.Config(app, host=self.config.bind_host, port=self.config.api_port, log_level="info")
+        config = uvicorn.Config(
+            app, host=self.config.bind_host, port=self.config.api_port, log_level="info"
+        )
         server = uvicorn.Server(config)
         thread = threading.Thread(target=server.run, daemon=True)
         thread.start()
 
     def _batch_receiver_loop(self) -> None:
         socket = self.context.socket(zmq.PULL)
-        _bind_socket_with_retry(socket, f"tcp://{self.config.bind_host}:{self.config.batch_port}")
+        _bind_socket_with_retry(
+            socket, f"tcp://{self.config.bind_host}:{self.config.batch_port}"
+        )
         while not self.stop_event.is_set():
             try:
                 payload = socket.recv(flags=zmq.NOBLOCK)
@@ -136,13 +181,44 @@ class MasterService:
                 continue
             if message.get("type") == "batch":
                 batch = Batch(**message["batch"])
+                assigned_id = self.state.next_task_id()
+                if batch.task_id != assigned_id:
+                    batch = replace(batch, task_id=assigned_id)
+                if self.config.queue_threshold > 0:
+                    while (
+                        not self.stop_event.is_set()
+                        and self.queue.qsize() >= self.config.queue_threshold
+                    ):
+                        now = time.time()
+                        if (
+                            now - self.last_backpressure_log
+                            >= self.backpressure_interval
+                        ):
+                            self.last_backpressure_log = now
+                            self.logger.info(
+                                "queue_backpressure depth=%6d threshold=%6d"
+                                % (self.queue.qsize(), self.config.queue_threshold)
+                            )
+                        time.sleep(0.05)
                 self.queue.put(batch)
                 with self.state.lock:
                     self.state.total_batches += 1
+                self.logger.debug(
+                    "batch_received",
+                    {
+                        "task_id": batch.task_id,
+                        "file_count": batch.file_count,
+                        "directory_count": batch.directory_count,
+                        "estimated_bytes": batch.estimated_bytes,
+                        "queue_depth": self.queue.qsize(),
+                    },
+                )
 
     def _result_receiver_loop(self) -> None:
         socket = self.context.socket(zmq.PULL)
-        _bind_socket_with_retry(socket, f"tcp://{self.config.bind_host}:{self.config.result_port}")
+        _bind_socket_with_retry(
+            socket, f"tcp://{self.config.bind_host}:{self.config.result_port}"
+        )
         while not self.stop_event.is_set():
             try:
                 payload = socket.recv(flags=zmq.NOBLOCK)
@@ -162,10 +238,26 @@ class MasterService:
                 errors=message.get("errors", []),
             )
             self.state.record_result(result)
+            self._maybe_log_progress()
+            self.logger.debug(
+                "result_received",
+                {
+                    "worker_id": result.worker_id,
+                    "task_id": result.task_id,
+                    "status": result.status,
+                    "retry_count": result.retry_count,
+                    "rsync_exit_code": result.rsync_exit_code,
+                    "file_count": result.stats.get("file_count"),
+                    "directory_count": result.stats.get("directory_count"),
+                    "estimated_bytes": result.stats.get("estimated_bytes"),
+                },
+            )
 
     def _heartbeat_receiver_loop(self) -> None:
         socket = self.context.socket(zmq.PULL)
-        _bind_socket_with_retry(socket, f"tcp://{self.config.bind_host}:{self.config.heartbeat_port}")
+        _bind_socket_with_retry(
+            socket, f"tcp://{self.config.bind_host}:{self.config.heartbeat_port}"
+        )
         while not self.stop_event.is_set():
             try:
                 payload = socket.recv(flags=zmq.NOBLOCK)
@@ -176,10 +268,13 @@ class MasterService:
             worker_id = message.get("worker_id")
             if worker_id:
                 self.state.update_heartbeat(worker_id)
+                self.logger.debug("heartbeat", {"worker_id": worker_id})
 
     def _claim_server_loop(self) -> None:
         socket = self.context.socket(zmq.REP)
-        _bind_socket_with_retry(socket, f"tcp://{self.config.bind_host}:{self.config.claim_port}")
+        _bind_socket_with_retry(
+            socket, f"tcp://{self.config.bind_host}:{self.config.claim_port}"
+        )
         while not self.stop_event.is_set():
             try:
                 payload = socket.recv(flags=zmq.NOBLOCK)
@@ -198,17 +293,96 @@ class MasterService:
                 else:
                     response = {"status": "empty"}
             socket.send(json_dumps(response))
+            self.logger.debug(
+                "claim",
+                {
+                    "worker_id": request.get("worker_id"),
+                    "status": response.get("status"),
+                    "queue_depth": self.queue.qsize(),
+                    "producers_done": self.producers_done,
+                },
+            )
 
     def wait_until_done(self) -> None:
         while not self.stop_event.is_set():
             if self.done_flag.is_set():
                 with self.state.lock:
-                    if self.state.completed_batches + self.state.failed_batches >= self.state.total_batches:
+                    if (
+                        self.state.completed_batches + self.state.failed_batches
+                        >= self.state.total_batches
+                    ):
                         return
             time.sleep(0.1)
 
+    def log_summary(self) -> None:
+        with self.state.lock:
+            total = self.state.total_batches
+            completed = self.state.completed_batches
+            failed = self.state.failed_batches
+            files_processed = self.state.completed_files
+            bytes_processed = self.state.completed_bytes
+            retained_count = len(self.state.results)
+            retained_limit = self.state.max_results
+            queue_depth = self.queue.qsize()
+            producers_done = self.producers_done
+            start_ts = self.state.start_ts
+        elapsed = max(time.time() - start_ts, 0.001)
+        gb_processed = bytes_processed / (1024**3)
+        rows = [
+            ("elapsed_sec", f"{elapsed:.3f}"),
+            ("batches_total", str(total)),
+            ("batches_completed", str(completed)),
+            ("batches_failed", str(failed)),
+            ("files_processed", str(files_processed)),
+            ("bytes_processed", str(bytes_processed)),
+            ("gb_processed", f"{gb_processed:.6f}"),
+            ("batches_per_sec", f"{completed / elapsed:.3f}"),
+            ("bytes_per_sec", f"{bytes_processed / elapsed:.3f}"),
+            ("gb_per_sec", f"{gb_processed / elapsed:.6f}"),
+            ("files_per_sec", f"{files_processed / elapsed:.3f}"),
+            ("queue_depth", str(queue_depth)),
+            ("producers_done", str(producers_done)),
+            ("results_retained", f"{retained_count}/{retained_limit}"),
+        ]
+        table = _format_kv_table(rows)
+        self.logger.info("master_summary\n%s", table)
 
-def create_app(state: MasterState, queue_ref: queue.Queue[Batch], service: MasterService) -> FastAPI:
+    def _maybe_log_progress(self) -> None:
+        now = time.time()
+        if now - self.last_progress_log < self.progress_interval:
+            return
+        self.last_progress_log = now
+        with self.state.lock:
+            pending = (
+                self.state.total_batches
+                - self.state.completed_batches
+                - self.state.failed_batches
+            )
+            total = self.state.total_batches
+            completed = self.state.completed_batches
+            failed = self.state.failed_batches
+            queue_depth = self.queue.qsize()
+            producers_done = self.producers_done
+            files_processed = self.state.completed_files
+            bytes_processed = self.state.completed_bytes
+        self.logger.info(
+            "progress total=%6d completed=%6d failed=%6d pending=%6d queue=%6d producers=%3d files=%8d bytes=%12d"
+            % (
+                total,
+                completed,
+                failed,
+                max(pending, 0),
+                queue_depth,
+                producers_done,
+                files_processed,
+                bytes_processed,
+            )
+        )
+
+
+def create_app(
+    state: MasterState, queue_ref: queue.Queue[Batch], service: MasterService
+) -> FastAPI:
     app = FastAPI()
 
     @app.get("/status")
@@ -225,7 +399,9 @@ def create_app(state: MasterState, queue_ref: queue.Queue[Batch], service: Maste
     @app.get("/progress")
     def progress() -> Dict[str, Any]:
         with state.lock:
-            pending = state.total_batches - state.completed_batches - state.failed_batches
+            pending = (
+                state.total_batches - state.completed_batches - state.failed_batches
+            )
             return {
                 "total": state.total_batches,
                 "completed": state.completed_batches,
@@ -237,15 +413,31 @@ def create_app(state: MasterState, queue_ref: queue.Queue[Batch], service: Maste
     def throughput() -> Dict[str, Any]:
         with state.lock:
             elapsed = max(time.time() - state.start_ts, 0.001)
+            gb_processed = state.completed_bytes / (1024**3)
             return {
                 "batches_per_sec": state.completed_batches / elapsed,
                 "elapsed_sec": elapsed,
+                "batches_completed": state.completed_batches,
+                "batches_failed": state.failed_batches,
+                "files_processed": state.completed_files,
+                "bytes_processed": state.completed_bytes,
+                "gb_processed": gb_processed,
+                "bytes_per_sec": state.completed_bytes / elapsed,
+                "gb_per_sec": gb_processed / elapsed,
+                "files_per_sec": state.completed_files / elapsed,
             }
 
     @app.get("/workers")
     def workers() -> Dict[str, Any]:
         with state.lock:
-            return {"heartbeats": state.heartbeats}
+            return {
+                "heartbeats": {
+                    worker_id: time.strftime(
+                        "%Y-%m-%d %H:%M:%S", time.localtime(timestamp)
+                    )
+                    for worker_id, timestamp in state.heartbeats.items()
+                }
+            }
 
     @app.get("/logs")
     def logs() -> Dict[str, Any]:
@@ -255,12 +447,18 @@ def create_app(state: MasterState, queue_ref: queue.Queue[Batch], service: Maste
     @app.get("/results")
     def results() -> Dict[str, Any]:
         with state.lock:
-            return {"results": [result.to_dict() for result in state.results.values()]}
+            return {
+                "results": [result.to_dict() for result in state.results.values()],
+                "retained_limit": state.max_results,
+                "retained_count": len(state.results),
+            }
 
     return app
 
 
-def _bind_socket_with_retry(socket_obj: zmq.Socket, endpoint: str, retries: int = 3, delay: float = 0.2) -> None:
+def _bind_socket_with_retry(
+    socket_obj: zmq.Socket, endpoint: str, retries: int = 3, delay: float = 0.2
+) -> None:
     for attempt in range(retries):
         try:
             socket_obj.bind(endpoint)
@@ -271,7 +469,9 @@ def _bind_socket_with_retry(socket_obj: zmq.Socket, endpoint: str, retries: int 
             time.sleep(delay)
 
 
-def _ensure_port_available(host: str, port: int, retries: int = 3, delay: float = 0.2) -> None:
+def _ensure_port_available(
+    host: str, port: int, retries: int = 3, delay: float = 0.2
+) -> None:
     last_error: Optional[OSError] = None
     for attempt in range(retries):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
@@ -288,7 +488,37 @@ def _ensure_port_available(host: str, port: int, retries: int = 3, delay: float 
         raise last_error
 
 
-def _producer_main(config: MasterConfig, bucket_index: int, files: List[Dict[str, Any]]) -> None:
+def _resolve_log_file(log_dir: str, log_prefix: str, name: str) -> Optional[str]:
+    if not log_dir:
+        return None
+    os.makedirs(log_dir, exist_ok=True)
+    prefix = log_prefix or ""
+    if prefix and not prefix.endswith(("-", "_")):
+        prefix = f"{prefix}-"
+    filename = f"{prefix}{name}.log"
+    return os.path.join(log_dir, filename)
+
+
+def _format_kv_table(rows: List[tuple[str, str]]) -> str:
+    key_width = max(len("metric"), max((len(key) for key, _ in rows), default=0))
+    value_width = max(
+        len("value"), max((len(value) for _, value in rows), default=0)
+    )
+    sep = f"+-{'-' * key_width}-+-{'-' * value_width}-+"
+    lines = [
+        sep,
+        f"| {'metric':<{key_width}} | {'value':<{value_width}} |",
+        sep,
+    ]
+    for key, value in rows:
+        lines.append(f"| {key:<{key_width}} | {value:<{value_width}} |")
+    lines.append(sep)
+    return "\n".join(lines)
+
+
+def _producer_main(
+    config: MasterConfig, bucket_index: int, files: List[Dict[str, Any]]
+) -> None:
     context = zmq.Context.instance()
     socket = context.socket(zmq.PUSH)
     socket.connect(f"tcp://{config.bind_host}:{config.batch_port}")
@@ -319,7 +549,12 @@ def parse_args() -> MasterConfig:
     parser.add_argument("--heartbeat-port", type=int, default=5558)
     parser.add_argument("--api-port", type=int, default=8000)
     parser.add_argument("--exit-when-done", action="store_true")
+    parser.add_argument("--debug", action="store_true")
+    parser.add_argument("--queue-threshold", type=int, default=1000)
+    parser.add_argument("--log-dir", default="")
+    parser.add_argument("--log-prefix", default="")
     args = parser.parse_args()
+    log_file = _resolve_log_file(args.log_dir, args.log_prefix, "master")
     return MasterConfig(
         src=args.src,
         dst=args.dst,
@@ -334,16 +569,27 @@ def parse_args() -> MasterConfig:
         heartbeat_port=args.heartbeat_port,
         api_port=args.api_port,
         exit_when_done=args.exit_when_done,
+        debug=args.debug,
+        queue_threshold=args.queue_threshold,
+        log_file=log_file,
     )
 
 
 def main() -> None:
     config = parse_args()
-    logger = configure_logger("nsync.master")
+    log_level = logging.DEBUG if config.debug else logging.INFO
+    logger = configure_logger(
+        "nsync.master", log_level, pretty=True, log_file=config.log_file
+    )
     if not os.path.isdir(config.src):
         raise SystemExit(f"source path not found: {config.src}")
 
+    logger.info(
+        "scan_start", {"src": config.src, "scan_depth": config.master_scan_depth}
+    )
     files = scan_paths(config.src, config.master_scan_depth)
+    logger.info("scan_complete", {"files": len(files)})
+    logger.debug("scan_complete", {"files": len(files)})
     buckets = bucketize(files, config.num_master_processes)
     service = MasterService(config)
     service.start()
@@ -351,29 +597,40 @@ def main() -> None:
     processes: List[multiprocessing.Process] = []
     for index, bucket in enumerate(buckets):
         payload = [{"path": item.path, "size": item.size} for item in bucket]
-        process = multiprocessing.Process(target=_producer_main, args=(config, index, payload), daemon=True)
+        process = multiprocessing.Process(
+            target=_producer_main, args=(config, index, payload), daemon=True
+        )
         process.start()
         processes.append(process)
+    logger.debug("producers_started", {"count": len(processes)})
+    logger.info("producers_started", {"count": len(processes)})
 
     stop_event = threading.Event()
+    signal_info: Dict[str, Optional[int]] = {"signum": None}
 
     def handle_signal(signum: int, frame: Optional[Any]) -> None:
-        logger.info("signal", {"signum": signum})
+        signal_info["signum"] = signum
         stop_event.set()
+        service.stop()
 
     signal.signal(signal.SIGINT, handle_signal)
     signal.signal(signal.SIGTERM, handle_signal)
 
     while not stop_event.is_set():
+        if service.stop_event.is_set():
+            break
         alive = any(process.is_alive() for process in processes)
         if not alive:
             if config.exit_when_done:
                 service.wait_until_done()
+                service.log_summary()
                 break
         time.sleep(0.2)
 
     for process in processes:
         process.join(timeout=2)
+    if signal_info["signum"] is not None:
+        logger.info("signal", {"signum": signal_info["signum"]})
     service.stop()
 
 

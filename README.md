@@ -31,29 +31,39 @@ nsync는 ZeroMQ 기반의 데이터 플레인과 FastAPI 기반의 운영 API를
 ### 패키지 설치
 
 ```bash
-python -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate
-pip install -e .
+pip install -e . 
 ```
+Ubuntu 24.04 에서 root로 실행 시 `pip install -e . --break-system-packages` 옵션이 필요할 수 있습니다.
 
 ### 서비스 실행 예시
 
 ```bash
-python -m nsync.master \
+python3 -m nsync.master \
   --src /data/src \
   --dst /data/dst \
   --batch-num-files 1000 \
   --batch-size 104857600 \
   --num-master-processes 4 \
-  --master-scan-depth 5
+  --master-scan-depth 5 \
+  --queue-threshold 1000 \
+  --debug \
+  --log-dir /var/log/nsync \
+  --log-prefix node-a
 ```
 
 ```bash
-python -m nsync.worker \
+python3 -m nsync.worker \
   --num-worker-processes 4 \
   --dst-host localhost \
-  --master-host 127.0.0.1
+  --master-host 127.0.0.1 \
+  --debug \
+  --log-dir /var/log/nsync \
+  --log-prefix node-a
 ```
+
+`--debug`를 활성화하면 배치 클레임/결과 처리 등 상세 로그가 출력되며, 워커는 종료 시 처리량 요약을 출력합니다. `--log-dir`와 `--log-prefix`를 지정하면 로그를 파일로 저장할 수 있습니다.
 
 운영 환경 기준 설치/배포/보안 고려사항은 [docs/installation.md](docs/installation.md)를 참고하세요.
 

@@ -10,7 +10,7 @@
 
 - `scan_paths(root, depth)`는 상대 경로와 파일 크기를 수집합니다.
 - `bucketize(files, num_buckets)`는 순차 라운드 로빈 방식으로 분할합니다.
-- `build_batches(...)`는 `max_files`, `max_bytes` 기준으로 배치를 구성합니다.
+- `build_batches(...)`는 `max_files`, `max_bytes` 기준으로 배치를 구성하고, 파일 수/디렉터리 수/바이트 추정치를 함께 기록합니다.
 - `compress_paths(...)`는 포함 관계를 기반으로 상위 디렉터리로 경로를 축약합니다.
 
 ## 확장 아이디어

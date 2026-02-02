@@ -43,3 +43,12 @@ __pycache__/
 
 # debug information files
 *.dwo
+
+# pytest cache
+.pytest_cache
+
+# egg
+nsync.egg-info
+
+# venv
+.venv

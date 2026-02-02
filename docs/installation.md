@@ -38,6 +38,9 @@ pip install -e .
 - `batch_size`: 네트워크 및 디스크 성능에 맞추어 64~512MB 범위에서 튜닝합니다.
 - `num_master_processes`: CPU 코어 수에 맞춰 설정합니다.
 - `num_worker_processes`: 워커 노드의 CPU 코어 수와 rsync I/O 병렬성을 고려해 설정합니다.
+- `debug`: 운영 중 이슈 분석이 필요할 때만 활성화합니다.
+- `queue_threshold`: 마스터 배치 큐의 상한입니다. 기본값은 1000입니다.
+- `log_dir/log_prefix`: 로그 파일을 저장할 경로와 파일 접두어를 지정합니다.
 
 ### 가용성 및 확장 전략
 

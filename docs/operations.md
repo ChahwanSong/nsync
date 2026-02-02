@@ -6,6 +6,20 @@
 - **처리량**: `/throughput`
 - **워커 상태**: `/workers`
 - **에러/경고**: `/logs`
+- **최근 결과**: `/results` (보관 상한 적용)
+
+## 디버그 모드
+
+- Master/Worker 모두 `--debug` 플래그를 제공하며, 배치 수신/클레임/결과 처리 등 주요 이벤트를 상세 로그로 확인할 수 있습니다.
+- 워커는 종료 시점에 처리량 요약 로그(`worker_summary`)를 출력합니다.
+- 기본 로그는 사람이 읽기 쉬운 포맷으로 stdout에 출력됩니다.
+- Master/Worker 모두 주기적으로 `progress` 로그를 INFO 레벨로 출력합니다.
+- Master는 `--exit-when-done` 모드에서 완료 시 `master_summary` 테이블을 출력하고 종료합니다.
+
+## 로그 파일
+
+- `--log-dir`와 `--log-prefix`를 지정하면 Master/Worker 로그를 지정 디렉터리에 파일로 남깁니다.
+- 예: `--log-dir /var/log/nsync --log-prefix node-a` → `node-a-master.log`, `node-a-worker.log`
 
 ## 성능 튜닝 체크리스트
 
