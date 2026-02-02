@@ -24,3 +24,4 @@
 - 로그 파일 출력은 `--log-dir`, `--log-prefix`로 지정합니다.
 - 결과 보관 상한은 `nsync/constants.py`의 `MAX_RESULT_HISTORY`로 관리합니다.
 - `--exit-when-done` 모드에서는 완료 시 `master_summary` 테이블을 출력합니다.
+- 하트비트 타임아웃(`heartbeat_timeout`)이 발생하면 해당 워커가 클레임한 배치를 재큐잉합니다.

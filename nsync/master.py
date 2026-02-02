@@ -12,7 +12,7 @@ import threading
 import time
 from collections import deque
 from dataclasses import dataclass, field, replace
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterator, List, Optional, Set, Tuple
 
 import uvicorn
 import zmq
@@ -38,11 +38,15 @@ class MasterState:
     warnings: List[str] = field(default_factory=list)
     errors: List[str] = field(default_factory=list)
     heartbeats: Dict[str, float] = field(default_factory=dict)
+    in_flight: Dict[int, "InFlightBatch"] = field(default_factory=dict)
+    worker_tasks: Dict[str, Set[int]] = field(default_factory=dict)
     lock: threading.Lock = field(default_factory=threading.Lock)
     max_results: int = MAX_RESULT_HISTORY
 
     def record_result(self, result: BatchResult) -> None:
         with self.lock:
+            if result.task_id in self.results:
+                return
             self.results[result.task_id] = result
             self.result_order.append(result.task_id)
             while len(self.result_order) > self.max_results:
@@ -76,6 +80,57 @@ class MasterState:
             self.task_id_seq += 1
             return self.task_id_seq
 
+    def register_in_flight(self, batch: Batch, worker_id: str) -> None:
+        with self.lock:
+            self.in_flight[batch.task_id] = InFlightBatch(
+                batch=batch, worker_id=worker_id, claimed_ts=time.time()
+            )
+            self.worker_tasks.setdefault(worker_id, set()).add(batch.task_id)
+
+    def complete_task(self, task_id: int, worker_id: Optional[str] = None) -> None:
+        with self.lock:
+            inflight = self.in_flight.pop(task_id, None)
+            if inflight is not None:
+                tasks = self.worker_tasks.get(inflight.worker_id)
+                if tasks is not None:
+                    tasks.discard(task_id)
+                    if not tasks:
+                        self.worker_tasks.pop(inflight.worker_id, None)
+            elif worker_id:
+                tasks = self.worker_tasks.get(worker_id)
+                if tasks is not None:
+                    tasks.discard(task_id)
+                    if not tasks:
+                        self.worker_tasks.pop(worker_id, None)
+
+    def take_timed_out_tasks(self, timeout_sec: float) -> Tuple[List[str], List[Batch]]:
+        now = time.time()
+        expired_workers: List[str] = []
+        batches: List[Batch] = []
+        with self.lock:
+            for worker_id, last_ts in list(self.heartbeats.items()):
+                if now - last_ts > timeout_sec:
+                    expired_workers.append(worker_id)
+            for worker_id in expired_workers:
+                task_ids = self.worker_tasks.pop(worker_id, set())
+                for task_id in task_ids:
+                    inflight = self.in_flight.pop(task_id, None)
+                    if inflight is not None:
+                        batches.append(inflight.batch)
+                self.heartbeats.pop(worker_id, None)
+        return expired_workers, batches
+
+    def is_completed(self, task_id: int) -> bool:
+        with self.lock:
+            return task_id in self.results
+
+
+@dataclass
+class InFlightBatch:
+    batch: Batch
+    worker_id: str
+    claimed_ts: float
+
 
 @dataclass
 class MasterConfig:
@@ -97,6 +152,7 @@ class MasterConfig:
     log_file: Optional[str]
     compress_paths: bool
     compress_max_depth: int
+    heartbeat_timeout: float
 
 
 class MasterService:
@@ -117,12 +173,17 @@ class MasterService:
         self.progress_interval = 5.0
         self.last_backpressure_log = 0.0
         self.backpressure_interval = 5.0
+        self.last_requeue_log = 0.0
+        self.requeue_interval = 5.0
+        self.server: Optional[uvicorn.Server] = None
+        self.api_thread: Optional[threading.Thread] = None
 
     def start(self) -> None:
         self._start_batch_receiver()
         self._start_result_receiver()
         self._start_heartbeat_receiver()
         self._start_claim_server()
+        self._start_requeue_monitor()
         self._start_api()
         self.logger.info(
             "master_started",
@@ -137,7 +198,14 @@ class MasterService:
     def stop(self) -> None:
         self.stop_event.set()
         self.done_flag.set()
-        self.context.term()
+        if self.server is not None:
+            self.server.should_exit = True
+        if self.api_thread is not None and self.api_thread.is_alive():
+            self.api_thread.join(timeout=2)
+        try:
+            self.context.term()
+        except zmq.ZMQError:
+            pass
 
     def _start_batch_receiver(self) -> None:
         thread = threading.Thread(target=self._batch_receiver_loop, daemon=True)
@@ -155,15 +223,19 @@ class MasterService:
         thread = threading.Thread(target=self._claim_server_loop, daemon=True)
         thread.start()
 
+    def _start_requeue_monitor(self) -> None:
+        thread = threading.Thread(target=self._requeue_monitor_loop, daemon=True)
+        thread.start()
+
     def _start_api(self) -> None:
         _ensure_port_available(self.config.bind_host, self.config.api_port)
         app = create_app(self.state, self.queue, self)
         config = uvicorn.Config(
             app, host=self.config.bind_host, port=self.config.api_port, log_level="info"
         )
-        server = uvicorn.Server(config)
-        thread = threading.Thread(target=server.run, daemon=True)
-        thread.start()
+        self.server = uvicorn.Server(config)
+        self.api_thread = threading.Thread(target=self.server.run, daemon=True)
+        self.api_thread.start()
 
     def _batch_receiver_loop(self) -> None:
         socket = self.context.socket(zmq.PULL)
@@ -239,6 +311,7 @@ class MasterService:
                 stats=message.get("stats", {}),
                 errors=message.get("errors", []),
             )
+            self.state.complete_task(result.task_id, result.worker_id)
             self.state.record_result(result)
             self._maybe_log_progress()
             self.logger.debug(
@@ -286,14 +359,20 @@ class MasterService:
             request = json_loads(payload)
             response: Dict[str, Any]
             try:
-                batch = self.queue.get_nowait()
-                response = {"status": "ok", "batch": batch.to_dict()}
+                response = {"status": "empty"}
+                while True:
+                    batch = self.queue.get_nowait()
+                    if self.state.is_completed(batch.task_id):
+                        continue
+                    response = {"status": "ok", "batch": batch.to_dict()}
+                    worker_id = request.get("worker_id")
+                    if worker_id:
+                        self.state.register_in_flight(batch, worker_id)
+                    break
             except queue.Empty:
                 if self.producers_done >= self.producers_total and self.queue.empty():
                     self.done_flag.set()
                     response = {"status": "done"}
-                else:
-                    response = {"status": "empty"}
             socket.send(json_dumps(response))
             self.logger.debug(
                 "claim",
@@ -304,6 +383,30 @@ class MasterService:
                     "producers_done": self.producers_done,
                 },
             )
+
+    def _requeue_monitor_loop(self) -> None:
+        while not self.stop_event.is_set():
+            if self.config.heartbeat_timeout <= 0:
+                time.sleep(1.0)
+                continue
+            expired_workers, batches = self.state.take_timed_out_tasks(
+                self.config.heartbeat_timeout
+            )
+            if expired_workers:
+                for batch in batches:
+                    self.queue.put(batch)
+                if batches:
+                    now = time.time()
+                    if now - self.last_requeue_log >= self.requeue_interval:
+                        self.last_requeue_log = now
+                        self.logger.warning(
+                            "requeue",
+                            {
+                                "expired_workers": len(expired_workers),
+                                "requeued_batches": len(batches),
+                            },
+                        )
+            time.sleep(0.5)
 
     def wait_until_done(self) -> None:
         while not self.stop_event.is_set():
@@ -571,6 +674,7 @@ def parse_args() -> MasterConfig:
     parser.add_argument("--log-prefix", default="")
     parser.add_argument("--compress-paths", action="store_true")
     parser.add_argument("--compress-max-depth", type=int, default=2)
+    parser.add_argument("--heartbeat-timeout", type=float, default=15.0)
     args = parser.parse_args()
     log_file = _resolve_log_file(args.log_dir, args.log_prefix, "master")
     return MasterConfig(
@@ -592,6 +696,7 @@ def parse_args() -> MasterConfig:
         log_file=log_file,
         compress_paths=args.compress_paths,
         compress_max_depth=args.compress_max_depth,
+        heartbeat_timeout=args.heartbeat_timeout,
     )
 
 

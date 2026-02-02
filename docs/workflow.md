@@ -38,6 +38,7 @@
 - Worker는 결과를 `result` 채널로 전송합니다.
 - 주기적인 `heartbeat` 이벤트를 `heartbeat` 채널로 전송합니다.
 - Master는 결과 집계를 통해 진행률과 실패 현황을 제공합니다.
+- 하트비트가 `heartbeat_timeout` 이상 끊기면 해당 워커가 클레임한 배치를 재큐잉합니다.
 
 ## 6) 종료 조건
 
