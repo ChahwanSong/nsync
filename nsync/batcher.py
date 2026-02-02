@@ -11,6 +11,7 @@ from .common import Batch, utc_timestamp
 class FileInfo:
     path: str
     size: int
+    is_dir: bool = False
 
 
 def scan_paths(root: str, depth: int) -> List[FileInfo]:
@@ -20,13 +21,26 @@ def scan_paths(root: str, depth: int) -> List[FileInfo]:
         rel_root = os.path.relpath(current_root, root)
         current_depth = 0 if rel_root == "." else rel_root.count(os.sep) + 1
         if current_depth >= depth:
+            if rel_root != ".":
+                files.append(FileInfo(path=rel_root, size=0, is_dir=True))
             dirs[:] = []
+            continue
         for filename in filenames:
             full_path = os.path.join(current_root, filename)
             rel_path = os.path.relpath(full_path, root)
             stat = os.lstat(full_path)
-            files.append(FileInfo(path=rel_path, size=stat.st_size))
+            files.append(FileInfo(path=rel_path, size=stat.st_size, is_dir=False))
     return files
+
+
+def scan_subtree(root: str, rel_dir: str) -> Iterator[FileInfo]:
+    base = os.path.join(root, rel_dir)
+    for current_root, dirs, filenames in os.walk(base, followlinks=False):
+        for filename in filenames:
+            full_path = os.path.join(current_root, filename)
+            rel_path = os.path.relpath(full_path, root)
+            stat = os.lstat(full_path)
+            yield FileInfo(path=rel_path, size=stat.st_size, is_dir=False)
 
 
 def bucketize(files: List[FileInfo], num_buckets: int) -> List[List[FileInfo]]:
@@ -88,7 +102,7 @@ def compress_paths(root: str, files: List[str], max_depth: Optional[int] = None)
 def iter_batches(
     src_base: str,
     dst_base: str,
-    files: List[FileInfo],
+    files: Iterable[FileInfo],
     max_files: int,
     max_bytes: int,
     compress_paths_enabled: bool = True,
@@ -101,12 +115,19 @@ def iter_batches(
         nonlocal current, total_size
         if not current:
             return None
-        file_paths = [item.path for item in current]
-        directory_count = len({os.path.dirname(path) for path in file_paths if os.path.dirname(path) not in {"", "."}})
+        file_paths = [item.path for item in current if not item.is_dir]
+        dir_paths = [item.path for item in current if item.is_dir]
+        directory_count = len(
+            {os.path.dirname(path) for path in file_paths if os.path.dirname(path) not in {"", "."}}
+        ) + len(dir_paths)
         if compress_paths_enabled:
-            compressed = compress_paths(src_base, file_paths, max_depth=compress_max_depth)
+            compressed = compress_paths(
+                src_base, file_paths, max_depth=compress_max_depth
+            )
         else:
             compressed = sorted(file_paths)
+        if dir_paths:
+            compressed = sorted(set(compressed).union(dir_paths))
         batch = Batch(
             task_id=0,
             paths=compressed,

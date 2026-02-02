@@ -18,7 +18,7 @@ import uvicorn
 import zmq
 from fastapi import FastAPI
 
-from .batcher import FileInfo, iter_batches, bucketize, scan_paths
+from .batcher import FileInfo, iter_batches, bucketize, scan_paths, scan_subtree
 from .common import Batch, BatchResult, configure_logger, json_loads, json_dumps
 from .constants import MAX_RESULT_HISTORY
 
@@ -524,10 +524,23 @@ def _producer_main(
     context = zmq.Context.instance()
     socket = context.socket(zmq.PUSH)
     socket.connect(f"tcp://{config.bind_host}:{config.batch_port}")
+
+    def file_iter() -> Iterator[FileInfo]:
+        for item in files:
+            info = FileInfo(
+                path=item["path"],
+                size=item.get("size", 0),
+                is_dir=item.get("is_dir", False),
+            )
+            if info.is_dir:
+                yield from scan_subtree(config.src, info.path)
+            else:
+                yield info
+
     for batch in iter_batches(
         config.src,
         config.dst,
-        files=[FileInfo(path=item["path"], size=item["size"]) for item in files],
+        files=file_iter(),
         max_files=config.batch_num_files,
         max_bytes=config.batch_size,
         compress_paths_enabled=config.compress_paths,
@@ -603,7 +616,10 @@ def main() -> None:
 
     processes: List[multiprocessing.Process] = []
     for index, bucket in enumerate(buckets):
-        payload = [{"path": item.path, "size": item.size} for item in bucket]
+        payload = [
+            {"path": item.path, "size": item.size, "is_dir": item.is_dir}
+            for item in bucket
+        ]
         process = multiprocessing.Process(
             target=_producer_main, args=(config, index, payload), daemon=True
         )

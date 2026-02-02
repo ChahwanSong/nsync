@@ -9,6 +9,8 @@
 ## 핵심 로직
 
 - `scan_paths(root, depth)`는 상대 경로와 파일 크기를 수집합니다.
+- 스캔 깊이에 도달한 디렉터리 자체를 하위 파일을 대표하는 항목으로 포함합니다.
+- `scan_subtree(root, rel_dir)`는 디렉터리 하위 파일을 재귀적으로 수집합니다.
 - `bucketize(files, num_buckets)`는 순차 라운드 로빈 방식으로 분할합니다.
 - `iter_batches(...)`는 `max_files`, `max_bytes` 기준으로 배치를 스트리밍 생성하고, 파일 수/디렉터리 수/바이트 추정치를 함께 기록합니다.
 - `compress_paths(..., max_depth)`는 경로 압축 최대 깊이를 제한할 수 있습니다.
