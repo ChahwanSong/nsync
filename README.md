@@ -48,6 +48,8 @@ python3 -m nsync.master \
   --num-master-processes 4 \
   --master-scan-depth 5 \
   --queue-threshold 1000 \
+  --compress-paths \
+  --compress-max-depth 2 \
   --debug \
   --log-dir /var/log/nsync \
   --log-prefix node-a

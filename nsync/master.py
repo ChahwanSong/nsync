@@ -18,7 +18,7 @@ import uvicorn
 import zmq
 from fastapi import FastAPI
 
-from .batcher import FileInfo, build_batches, bucketize, scan_paths
+from .batcher import FileInfo, iter_batches, bucketize, scan_paths
 from .common import Batch, BatchResult, configure_logger, json_loads, json_dumps
 from .constants import MAX_RESULT_HISTORY
 
@@ -95,6 +95,8 @@ class MasterConfig:
     debug: bool
     queue_threshold: int
     log_file: Optional[str]
+    compress_paths: bool
+    compress_max_depth: int
 
 
 class MasterService:
@@ -522,14 +524,15 @@ def _producer_main(
     context = zmq.Context.instance()
     socket = context.socket(zmq.PUSH)
     socket.connect(f"tcp://{config.bind_host}:{config.batch_port}")
-    batch_list = build_batches(
+    for batch in iter_batches(
         config.src,
         config.dst,
         files=[FileInfo(path=item["path"], size=item["size"]) for item in files],
         max_files=config.batch_num_files,
         max_bytes=config.batch_size,
-    )
-    for batch in batch_list:
+        compress_paths_enabled=config.compress_paths,
+        compress_max_depth=config.compress_max_depth,
+    ):
         socket.send(json_dumps({"type": "batch", "batch": batch.to_dict()}))
     socket.send(json_dumps({"type": "producer_done", "bucket": bucket_index}))
 
@@ -553,6 +556,8 @@ def parse_args() -> MasterConfig:
     parser.add_argument("--queue-threshold", type=int, default=1000)
     parser.add_argument("--log-dir", default="")
     parser.add_argument("--log-prefix", default="")
+    parser.add_argument("--compress-paths", action="store_true")
+    parser.add_argument("--compress-max-depth", type=int, default=2)
     args = parser.parse_args()
     log_file = _resolve_log_file(args.log_dir, args.log_prefix, "master")
     return MasterConfig(
@@ -572,6 +577,8 @@ def parse_args() -> MasterConfig:
         debug=args.debug,
         queue_threshold=args.queue_threshold,
         log_file=log_file,
+        compress_paths=args.compress_paths,
+        compress_max_depth=args.compress_max_depth,
     )
 
 

@@ -10,16 +10,15 @@ pip install -e .
 ```bash
 
 python3 -m nsync.master \
-  --src /home/mason/workspace/test/src \
+  --src /home/mason/workspace/test/src2 \
   --dst /home/mason/workspace/test/dst \
-  --batch-num-files 1 \
-  --batch-size 104857600 \
+  --batch-num-files 100 \
+  --batch-size 1048576 \
   --num-master-processes 3 \
   --master-scan-depth 3 \
   --log-dir /home/mason/workspace/nsync \
   --queue-threshold 10 \
-  --log-prefix abc \
-  --exit-when-done
+  --log-prefix abc
 ```
 
 ## Worker
@@ -27,8 +26,7 @@ python3 -m nsync.master \
 python3 -m nsync.worker \
   --num-worker-processes 3 \
   --dst-host localhost \
-  --master-host localhost \
-  --debug
+  --master-host localhost
 ```
 
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from typing import Dict, Iterable, List, Set, Tuple
+from typing import Dict, Iterable, Iterator, List, Optional, Set, Tuple
 
 from .common import Batch, utc_timestamp
 
@@ -47,14 +47,21 @@ def _list_files_under(root: str, rel_dir: str) -> Set[str]:
     return file_set
 
 
-def compress_paths(root: str, files: List[str]) -> List[str]:
+def _path_depth(path: str) -> int:
+    if not path or path == ".":
+        return 0
+    return path.count(os.sep) + 1
+
+
+def compress_paths(root: str, files: List[str], max_depth: Optional[int] = None) -> List[str]:
     root = os.path.abspath(root)
     file_set = set(files)
     dir_candidates: Set[str] = set()
     for path in files:
         parent = os.path.dirname(path)
         while parent and parent != ".":
-            dir_candidates.add(parent)
+            if max_depth is None or _path_depth(parent) <= max_depth:
+                dir_candidates.add(parent)
             parent = os.path.dirname(parent)
 
     sorted_dirs = sorted(dir_candidates, key=lambda p: p.count(os.sep), reverse=True)
@@ -78,43 +85,71 @@ def compress_paths(root: str, files: List[str]) -> List[str]:
     return sorted(included)
 
 
+def iter_batches(
+    src_base: str,
+    dst_base: str,
+    files: List[FileInfo],
+    max_files: int,
+    max_bytes: int,
+    compress_paths_enabled: bool = True,
+    compress_max_depth: Optional[int] = None,
+) -> Iterator[Batch]:
+    current: List[FileInfo] = []
+    total_size = 0
+
+    def flush() -> Batch | None:
+        nonlocal current, total_size
+        if not current:
+            return None
+        file_paths = [item.path for item in current]
+        directory_count = len({os.path.dirname(path) for path in file_paths if os.path.dirname(path) not in {"", "."}})
+        if compress_paths_enabled:
+            compressed = compress_paths(src_base, file_paths, max_depth=compress_max_depth)
+        else:
+            compressed = sorted(file_paths)
+        batch = Batch(
+            task_id=0,
+            paths=compressed,
+            file_count=len(current),
+            directory_count=directory_count,
+            estimated_bytes=total_size,
+            src_base=src_base,
+            dst_base=dst_base,
+            created_ts=utc_timestamp(),
+        )
+        current = []
+        total_size = 0
+        return batch
+
+    for info in files:
+        if current and (len(current) + 1 > max_files or total_size + info.size > max_bytes):
+            batch = flush()
+            if batch is not None:
+                yield batch
+        current.append(info)
+        total_size += info.size
+    batch = flush()
+    if batch is not None:
+        yield batch
+
+
 def build_batches(
     src_base: str,
     dst_base: str,
     files: List[FileInfo],
     max_files: int,
     max_bytes: int,
+    compress_paths_enabled: bool = True,
+    compress_max_depth: Optional[int] = None,
 ) -> List[Batch]:
-    batches: List[Batch] = []
-    current: List[FileInfo] = []
-    total_size = 0
-
-    def flush() -> None:
-        nonlocal current, total_size
-        if not current:
-            return
-        file_paths = [item.path for item in current]
-        directory_count = len({os.path.dirname(path) for path in file_paths if os.path.dirname(path) not in {"", "."}})
-        compressed = compress_paths(src_base, file_paths)
-        batches.append(
-            Batch(
-                task_id=0,
-                paths=compressed,
-                file_count=len(current),
-                directory_count=directory_count,
-                estimated_bytes=total_size,
-                src_base=src_base,
-                dst_base=dst_base,
-                created_ts=utc_timestamp(),
-            )
+    return list(
+        iter_batches(
+            src_base,
+            dst_base,
+            files,
+            max_files,
+            max_bytes,
+            compress_paths_enabled=compress_paths_enabled,
+            compress_max_depth=compress_max_depth,
         )
-        current = []
-        total_size = 0
-
-    for info in files:
-        if current and (len(current) + 1 > max_files or total_size + info.size > max_bytes):
-            flush()
-        current.append(info)
-        total_size += info.size
-    flush()
-    return batches
+    )
