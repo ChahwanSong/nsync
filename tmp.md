@@ -14,7 +14,7 @@ python3 -m nsync.master \
   --dst /home/mason/workspace/test/dst \
   --batch-num-files 10000 \
   --batch-size 104857600 \
-  --num-master-processes 3 \
+  --num-master-processes 5 \
   --master-scan-depth 3 \
   --queue-threshold 10 \
   --log-dir /home/mason/workspace/nsync \

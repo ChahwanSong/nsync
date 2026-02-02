@@ -95,7 +95,7 @@ curl -s http://localhost:8000/throughput | jq
 
 ## GET /workers
 
-워커 헬스비트 맵을 반환합니다. 값은 마스터 호스트 기준 로컬 시간 문자열입니다.
+워커 헬스비트 맵을 반환합니다. 값은 `Asia/Seoul` 시간 문자열입니다.
 
 ### 예제 요청
 
@@ -142,6 +142,7 @@ curl -s http://localhost:8000/logs | jq
 최근 배치 결과 리스트를 반환합니다. 결과는 메모리 보호를 위해 최대 보관 수를 넘으면 오래된 항목부터 제거됩니다.
 
 `task_id`는 마스터가 배치를 큐에 넣는 시점에 1부터 순차 증가로 부여합니다.
+`*_iso` 시간 필드는 `Asia/Seoul` 기준입니다.
 
 ### 예제 요청
 
@@ -164,13 +165,16 @@ curl -s http://localhost:8000/results | jq
         "bytes_sent": 0,
         "bytes_received": 0,
         "start_ts": 1714372000.0,
+        "start_ts_iso": "2026-02-02 06:46:40",
         "end_ts": 1714372002.1,
+        "end_ts_iso": "2026-02-02 06:46:42",
         "file_count": 500,
         "directory_count": 42,
         "estimated_bytes": 104857600
       },
       "errors": [],
-      "received_ts": 1714372002.2
+      "received_ts": 1714372002.2,
+      "received_ts_iso": "2026-02-02 06:46:42"
     }
   ],
   "retained_limit": 100000,

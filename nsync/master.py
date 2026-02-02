@@ -12,7 +12,9 @@ import threading
 import time
 from collections import deque
 from dataclasses import dataclass, field, replace
+from datetime import datetime
 from typing import Any, Dict, Iterator, List, Optional, Set, Tuple
+from zoneinfo import ZoneInfo
 
 import uvicorn
 import zmq
@@ -20,7 +22,24 @@ from fastapi import FastAPI
 
 from .batcher import FileInfo, iter_batches, bucketize, scan_paths, scan_subtree
 from .common import Batch, BatchResult, configure_logger, json_loads, json_dumps
-from .constants import MAX_RESULT_HISTORY
+from .constants import (
+    MAX_RESULT_HISTORY,
+    DEFAULT_BATCH_NUM_FILES,
+    DEFAULT_BATCH_SIZE,
+    DEFAULT_COMPRESS_MAX_DEPTH,
+    DEFAULT_COMPRESS_PATHS,
+    DEFAULT_HEARTBEAT_TIMEOUT,
+    DEFAULT_MASTER_API_PORT,
+    DEFAULT_MASTER_BATCH_PORT,
+    DEFAULT_MASTER_BIND_HOST,
+    DEFAULT_MASTER_CLAIM_PORT,
+    DEFAULT_MASTER_HEARTBEAT_PORT,
+    DEFAULT_MASTER_RESULT_PORT,
+    DEFAULT_MASTER_SCAN_DEPTH,
+    DEFAULT_NUM_MASTER_PROCESSES,
+    DEFAULT_QUEUE_THRESHOLD,
+    DEFAULT_TIMEZONE,
+)
 
 
 @dataclass
@@ -534,12 +553,13 @@ def create_app(
 
     @app.get("/workers")
     def workers() -> Dict[str, Any]:
+        timezone = ZoneInfo(DEFAULT_TIMEZONE)
         with state.lock:
             return {
                 "heartbeats": {
-                    worker_id: time.strftime(
-                        "%Y-%m-%d %H:%M:%S", time.localtime(timestamp)
-                    )
+                    worker_id: datetime.fromtimestamp(
+                        timestamp, tz=timezone
+                    ).strftime("%Y-%m-%d %H:%M:%S")
                     for worker_id, timestamp in state.heartbeats.items()
                 }
             }
@@ -654,27 +674,93 @@ def _producer_main(
 
 
 def parse_args() -> MasterConfig:
-    parser = argparse.ArgumentParser(description="nsync master")
+    parser = argparse.ArgumentParser(
+        description="nsync master",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
     parser.add_argument("--src", required=True)
     parser.add_argument("--dst", required=True)
-    parser.add_argument("--batch-num-files", type=int, required=True)
-    parser.add_argument("--batch-size", type=int, required=True)
-    parser.add_argument("--num-master-processes", type=int, required=True)
-    parser.add_argument("--master-scan-depth", type=int, required=True)
-    parser.add_argument("--bind-host", default="0.0.0.0")
-    parser.add_argument("--claim-port", type=int, default=5555)
-    parser.add_argument("--batch-port", type=int, default=5556)
-    parser.add_argument("--result-port", type=int, default=5557)
-    parser.add_argument("--heartbeat-port", type=int, default=5558)
-    parser.add_argument("--api-port", type=int, default=8000)
-    parser.add_argument("--exit-when-done", action="store_true")
-    parser.add_argument("--debug", action="store_true")
-    parser.add_argument("--queue-threshold", type=int, default=1000)
-    parser.add_argument("--log-dir", default="")
-    parser.add_argument("--log-prefix", default="")
-    parser.add_argument("--compress-paths", action="store_true")
-    parser.add_argument("--compress-max-depth", type=int, default=2)
-    parser.add_argument("--heartbeat-timeout", type=float, default=15.0)
+    parser.add_argument(
+        "--batch-num-files",
+        type=int,
+        default=DEFAULT_BATCH_NUM_FILES,
+        help="max files per batch",
+    )
+    parser.add_argument(
+        "--batch-size", type=int, default=DEFAULT_BATCH_SIZE, help="max bytes per batch"
+    )
+    parser.add_argument(
+        "--num-master-processes",
+        type=int,
+        default=DEFAULT_NUM_MASTER_PROCESSES,
+        help="number of producer processes",
+    )
+    parser.add_argument(
+        "--master-scan-depth",
+        type=int,
+        default=DEFAULT_MASTER_SCAN_DEPTH,
+        help="scan depth for initial directory walk",
+    )
+    parser.add_argument(
+        "--bind-host",
+        default=DEFAULT_MASTER_BIND_HOST,
+        help="host to bind master services",
+    )
+    parser.add_argument(
+        "--claim-port",
+        type=int,
+        default=DEFAULT_MASTER_CLAIM_PORT,
+        help="port for claim channel",
+    )
+    parser.add_argument(
+        "--batch-port",
+        type=int,
+        default=DEFAULT_MASTER_BATCH_PORT,
+        help="port for batch channel",
+    )
+    parser.add_argument(
+        "--result-port",
+        type=int,
+        default=DEFAULT_MASTER_RESULT_PORT,
+        help="port for result channel",
+    )
+    parser.add_argument(
+        "--heartbeat-port",
+        type=int,
+        default=DEFAULT_MASTER_HEARTBEAT_PORT,
+        help="port for heartbeat channel",
+    )
+    parser.add_argument(
+        "--api-port",
+        type=int,
+        default=DEFAULT_MASTER_API_PORT,
+        help="port for API server",
+    )
+    parser.add_argument("--exit-when-done", action="store_true", help="exit when done")
+    parser.add_argument("--debug", action="store_true", help="enable debug logging")
+    parser.add_argument(
+        "--queue-threshold",
+        type=int,
+        default=DEFAULT_QUEUE_THRESHOLD,
+        help="max queue depth before backpressure",
+    )
+    parser.add_argument("--log-dir", default="", help="log directory")
+    parser.add_argument("--log-prefix", default="", help="log file prefix")
+    parser.add_argument(
+        "--compress-paths", action="store_true", help="enable path compression"
+    )
+    parser.add_argument(
+        "--compress-max-depth",
+        type=int,
+        default=DEFAULT_COMPRESS_MAX_DEPTH,
+        help="max directory depth for path compression",
+    )
+    parser.add_argument(
+        "--heartbeat-timeout",
+        type=float,
+        default=DEFAULT_HEARTBEAT_TIMEOUT,
+        help="heartbeat timeout in seconds before requeue",
+    )
     args = parser.parse_args()
     log_file = _resolve_log_file(args.log_dir, args.log_prefix, "master")
     return MasterConfig(
@@ -694,7 +780,7 @@ def parse_args() -> MasterConfig:
         debug=args.debug,
         queue_threshold=args.queue_threshold,
         log_file=log_file,
-        compress_paths=args.compress_paths,
+        compress_paths=args.compress_paths or DEFAULT_COMPRESS_PATHS,
         compress_max_depth=args.compress_max_depth,
         heartbeat_timeout=args.heartbeat_timeout,
     )

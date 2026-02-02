@@ -22,6 +22,18 @@ from .common import (
     resolve_rsync_exit_code,
     utc_timestamp,
 )
+from .constants import (
+    DEFAULT_DST_HOST,
+    DEFAULT_HEARTBEAT_INTERVAL,
+    DEFAULT_MASTER_HOST,
+    DEFAULT_NUM_WORKER_PROCESSES,
+    DEFAULT_RETRY_LIMIT,
+    DEFAULT_RSYNC_ARGS,
+    DEFAULT_RSYNC_BIN,
+    DEFAULT_WORKER_CLAIM_PORT,
+    DEFAULT_WORKER_HEARTBEAT_PORT,
+    DEFAULT_WORKER_RESULT_PORT,
+)
 
 
 @dataclass
@@ -363,20 +375,55 @@ def _format_kv_table(rows: List[tuple[str, str]]) -> str:
 
 
 def parse_args() -> WorkerConfig:
-    parser = argparse.ArgumentParser(description="nsync worker")
-    parser.add_argument("--num-worker-processes", type=int, required=True)
-    parser.add_argument("--dst-host", required=True)
-    parser.add_argument("--master-host", default="127.0.0.1")
-    parser.add_argument("--claim-port", type=int, default=5555)
-    parser.add_argument("--result-port", type=int, default=5557)
-    parser.add_argument("--heartbeat-port", type=int, default=5558)
-    parser.add_argument("--rsync-bin", default="rsync")
-    parser.add_argument("--rsync-args", default="")
-    parser.add_argument("--retry-limit", type=int, default=3)
-    parser.add_argument("--heartbeat-interval", type=float, default=5.0)
-    parser.add_argument("--debug", action="store_true")
-    parser.add_argument("--log-dir", default="")
-    parser.add_argument("--log-prefix", default="")
+    parser = argparse.ArgumentParser(
+        description="nsync worker",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    parser.add_argument(
+        "--num-worker-processes",
+        type=int,
+        default=DEFAULT_NUM_WORKER_PROCESSES,
+        help="number of worker threads",
+    )
+    parser.add_argument("--dst-host", default=DEFAULT_DST_HOST, help="destination host")
+    parser.add_argument("--master-host", default=DEFAULT_MASTER_HOST, help="master host")
+    parser.add_argument(
+        "--claim-port",
+        type=int,
+        default=DEFAULT_WORKER_CLAIM_PORT,
+        help="port for claim channel",
+    )
+    parser.add_argument(
+        "--result-port",
+        type=int,
+        default=DEFAULT_WORKER_RESULT_PORT,
+        help="port for result channel",
+    )
+    parser.add_argument(
+        "--heartbeat-port",
+        type=int,
+        default=DEFAULT_WORKER_HEARTBEAT_PORT,
+        help="port for heartbeat channel",
+    )
+    parser.add_argument("--rsync-bin", default=DEFAULT_RSYNC_BIN, help="rsync binary")
+    parser.add_argument(
+        "--rsync-args", default=DEFAULT_RSYNC_ARGS, help="extra rsync args"
+    )
+    parser.add_argument(
+        "--retry-limit",
+        type=int,
+        default=DEFAULT_RETRY_LIMIT,
+        help="retry count on rsync failure",
+    )
+    parser.add_argument(
+        "--heartbeat-interval",
+        type=float,
+        default=DEFAULT_HEARTBEAT_INTERVAL,
+        help="heartbeat interval in seconds",
+    )
+    parser.add_argument("--debug", action="store_true", help="enable debug logging")
+    parser.add_argument("--log-dir", default="", help="log directory")
+    parser.add_argument("--log-prefix", default="", help="log file prefix")
     args = parser.parse_args()
     log_file = _resolve_log_file(args.log_dir, args.log_prefix, "worker")
     return WorkerConfig(

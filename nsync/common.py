@@ -5,8 +5,12 @@ import logging
 import socket
 import time
 import uuid
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from dataclasses import dataclass, field
 from typing import Any, Dict, Iterable, List, Optional
+
+from .constants import DEFAULT_TIMEZONE
 
 
 @dataclass(frozen=True)
@@ -45,15 +49,36 @@ class BatchResult:
     received_ts: float = field(default_factory=lambda: time.time())
 
     def to_dict(self) -> Dict[str, Any]:
+        stats = self.stats or {}
+        start_ts = stats.get("start_ts")
+        end_ts = stats.get("end_ts")
+        timezone = ZoneInfo(DEFAULT_TIMEZONE)
+        start_ts_iso = (
+            datetime.fromtimestamp(start_ts, tz=timezone).strftime("%Y-%m-%d %H:%M:%S")
+            if isinstance(start_ts, (int, float))
+            else None
+        )
+        end_ts_iso = (
+            datetime.fromtimestamp(end_ts, tz=timezone).strftime("%Y-%m-%d %H:%M:%S")
+            if isinstance(end_ts, (int, float))
+            else None
+        )
         return {
             "worker_id": self.worker_id,
             "task_id": self.task_id,
             "status": self.status,
             "retry_count": self.retry_count,
             "rsync_exit_code": self.rsync_exit_code,
-            "stats": self.stats,
+            "stats": {
+                **stats,
+                "start_ts_iso": start_ts_iso,
+                "end_ts_iso": end_ts_iso,
+            },
             "errors": self.errors,
             "received_ts": self.received_ts,
+            "received_ts_iso": datetime.fromtimestamp(
+                self.received_ts, tz=timezone
+            ).strftime("%Y-%m-%d %H:%M:%S"),
         }
 
 
