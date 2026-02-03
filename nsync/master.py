@@ -413,19 +413,26 @@ class MasterService:
             )
             if expired_workers:
                 for batch in batches:
-                    self.queue.put(batch)
-                if batches:
-                    now = time.time()
-                    if now - self.last_requeue_log >= self.requeue_interval:
-                        self.last_requeue_log = now
-                        self.logger.warning(
-                            "requeue",
-                            {
-                                "expired_workers": len(expired_workers),
-                                "requeued_batches": len(batches),
-                            },
-                        )
+                    self._queue_put_front(batch)
+                now = time.time()
+                if now - self.last_requeue_log >= self.requeue_interval:
+                    self.last_requeue_log = now
+                    log_payload = {
+                        "expired_workers": len(expired_workers),
+                        "requeued_batches": len(batches),
+                    }
+                    if batches:
+                        self.logger.warning("requeue", log_payload)
+                    else:
+                        self.logger.info("requeue", log_payload)
             time.sleep(0.5)
+
+    def _queue_put_front(self, batch: Batch) -> None:
+        queue_ref = self.queue
+        with queue_ref.mutex:
+            queue_ref.queue.appendleft(batch)
+            queue_ref.unfinished_tasks += 1
+            queue_ref.not_empty.notify()
 
     def wait_until_done(self) -> None:
         while not self.stop_event.is_set():
@@ -518,6 +525,7 @@ def create_app(
                 "failed_batches": state.failed_batches,
                 "queue_depth": queue_ref.qsize(),
                 "producers_done": service.producers_done,
+                "producers_total": service.producers_total,
             }
 
     @app.get("/progress")

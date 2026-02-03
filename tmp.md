@@ -12,7 +12,7 @@ pip install -e .
 python3 -m nsync.master \
   --src /home/mason/workspace/test/src2 \
   --dst /home/mason/workspace/test/dst \
-  --batch-num-files 10000 \
+  --batch-num-files 100 \
   --batch-size 104857600 \
   --num-master-processes 5 \
   --master-scan-depth 3 \
@@ -27,6 +27,18 @@ python3 -m nsync.worker \
   --num-worker-processes 3 \
   --dst-host localhost \
   --master-host localhost
+```
+
+## 쿼리
+```bash
+curl -s http://localhost:8000/throughput | jq
+curl -s http://localhost:8000/progress | jq
+curl -s http://localhost:8000/status | jq
+curl -s http://localhost:8000/workers | jq
+curl -s http://localhost:8000/logs | jq
+curl -s http://localhost:8000/results | jq
+
+
 ```
 
 

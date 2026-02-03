@@ -159,3 +159,310 @@
 2026-02-02 22:53:15.675 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
 2026-02-02 22:53:20.685 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
 2026-02-02 22:53:24.862 INFO  nsync.master signal signum=2
+2026-02-03 22:13:02.074 INFO  nsync.master scan_start src="/home/mason/workspace/test/src2" scan_depth=3
+2026-02-03 22:13:05.095 INFO  nsync.master scan_complete files=500675
+2026-02-03 22:13:05.141 INFO  nsync.master master_started src="/home/mason/workspace/test/src2" dst="/home/mason/workspace/test/dst" num_master_processes=5 queue_threshold=10
+2026-02-03 22:13:05.228 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:13:05.431 INFO  nsync.master producers_started count=5
+2026-02-03 22:13:10.233 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:13:15.242 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:13:20.250 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:13:25.259 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:13:30.267 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:13:35.277 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:13:40.286 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:13:42.507 INFO  nsync.master progress total=    13 completed=     1 failed=     0 pending=    12 queue=    10 producers=  0 files=     100 bytes=           0
+2026-02-03 22:13:45.299 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:13:47.526 INFO  nsync.master progress total=   248 completed=   234 failed=     0 pending=    14 queue=    10 producers=  0 files=   22950 bytes=  1048576000
+2026-02-03 22:13:50.317 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:13:52.543 INFO  nsync.master progress total=   497 completed=   483 failed=     0 pending=    14 queue=    10 producers=  0 files=   47850 bytes=  1048576000
+2026-02-03 22:13:55.337 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:13:57.561 INFO  nsync.master progress total=   746 completed=   731 failed=     0 pending=    15 queue=    10 producers=  0 files=   72650 bytes=  1048576000
+2026-02-03 22:14:00.355 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:14:02.578 INFO  nsync.master progress total=   993 completed=   980 failed=     0 pending=    13 queue=     8 producers=  0 files=   97550 bytes=  1048576000
+2026-02-03 22:14:05.374 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:14:07.595 INFO  nsync.master progress total=  1242 completed=  1229 failed=     0 pending=    13 queue=     8 producers=  0 files=  122450 bytes=  1048576000
+2026-02-03 22:14:10.392 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:14:12.612 INFO  nsync.master progress total=  1491 completed=  1478 failed=     0 pending=    13 queue=    10 producers=  0 files=  147350 bytes=  1048576000
+2026-02-03 22:14:15.410 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:14:17.629 INFO  nsync.master progress total=  1740 completed=  1727 failed=     0 pending=    13 queue=    10 producers=  0 files=  172250 bytes=  1048576000
+2026-02-03 22:14:20.428 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:14:22.646 INFO  nsync.master progress total=  1988 completed=  1976 failed=     0 pending=    12 queue=     9 producers=  0 files=  197150 bytes=  1048576000
+2026-02-03 22:14:25.446 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:14:27.662 INFO  nsync.master progress total=  2237 completed=  2223 failed=     0 pending=    14 queue=    10 producers=  0 files=  221850 bytes=  1048576000
+2026-02-03 22:14:30.464 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:14:32.679 INFO  nsync.master progress total=  2486 completed=  2472 failed=     0 pending=    14 queue=    10 producers=  0 files=  246750 bytes=  1048576000
+2026-02-03 22:14:35.484 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:14:37.693 INFO  nsync.master progress total=  2735 completed=  2721 failed=     0 pending=    14 queue=    10 producers=  0 files=  271650 bytes=  1048576000
+2026-02-03 22:14:40.503 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:14:42.712 INFO  nsync.master progress total=  2984 completed=  2969 failed=     0 pending=    15 queue=    10 producers=  0 files=  296450 bytes=  1048576000
+2026-02-03 22:14:45.520 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:14:47.731 INFO  nsync.master progress total=  3233 completed=  3218 failed=     0 pending=    15 queue=    10 producers=  0 files=  321350 bytes=  1048576000
+2026-02-03 22:14:50.538 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:14:52.751 INFO  nsync.master progress total=  3478 completed=  3464 failed=     0 pending=    14 queue=    10 producers=  0 files=  345870 bytes=  1258291200
+2026-02-03 22:14:55.555 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:14:57.771 INFO  nsync.master progress total=  3722 completed=  3709 failed=     0 pending=    13 queue=     9 producers=  0 files=  370370 bytes=  1382099968
+2026-02-03 22:15:00.572 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:15:02.787 INFO  nsync.master progress total=  3938 completed=  3926 failed=     0 pending=    12 queue=    10 producers=  0 files=  391750 bytes=  2787737600
+2026-02-03 22:15:05.593 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:15:07.803 INFO  nsync.master progress total=  4172 completed=  4159 failed=     0 pending=    13 queue=    10 producers=  0 files=  415050 bytes=  3405143040
+2026-02-03 22:15:10.613 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:15:12.821 INFO  nsync.master progress total=  4356 completed=  4344 failed=     0 pending=    12 queue=     9 producers=  0 files=  433550 bytes=  5810856960
+2026-02-03 22:15:15.632 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:15:17.839 INFO  nsync.master progress total=  4533 completed=  4521 failed=     0 pending=    12 queue=     8 producers=  0 files=  451250 bytes=  8112615424
+2026-02-03 22:15:20.650 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:15:22.858 INFO  nsync.master progress total=  4726 completed=  4713 failed=     0 pending=    13 queue=    10 producers=  0 files=  470450 bytes= 10616143872
+2026-02-03 22:15:25.669 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:15:27.878 INFO  nsync.master progress total=  4912 completed=  4899 failed=     0 pending=    13 queue=    10 producers=  0 files=  489050 bytes= 13045745664
+2026-02-03 22:15:30.687 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:15:32.896 INFO  nsync.master progress total=  5098 completed=  5085 failed=     0 pending=    13 queue=    10 producers=  0 files=  507650 bytes= 15465990144
+2026-02-03 22:15:35.705 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:15:37.913 INFO  nsync.master progress total=  5280 completed=  5266 failed=     0 pending=    14 queue=    10 producers=  0 files=  525750 bytes= 17833648128
+2026-02-03 22:15:40.723 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:15:42.931 INFO  nsync.master progress total=  5459 completed=  5446 failed=     0 pending=    13 queue=    10 producers=  0 files=  543750 bytes= 20190703616
+2026-02-03 22:15:45.739 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:15:48.098 INFO  nsync.master progress total=  5608 completed=  5596 failed=     0 pending=    12 queue=    10 producers=  0 files=  558750 bytes= 22148685824
+2026-02-03 22:15:50.757 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:15:53.164 INFO  nsync.master progress total=  5751 completed=  5736 failed=     0 pending=    15 queue=    10 producers=  0 files=  572750 bytes= 23978841088
+2026-02-03 22:15:55.771 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:15:58.229 INFO  nsync.master progress total=  5890 completed=  5875 failed=     0 pending=    15 queue=    10 producers=  0 files=  586650 bytes= 25771144192
+2026-02-03 22:16:00.786 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:16:03.292 INFO  nsync.master progress total=  5967 completed=  5954 failed=     0 pending=    13 queue=    10 producers=  0 files=  594550 bytes= 26797882368
+2026-02-03 22:16:05.800 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:16:08.309 INFO  nsync.master progress total=  6145 completed=  6133 failed=     0 pending=    12 queue=     9 producers=  0 files=  612450 bytes= 29129732096
+2026-02-03 22:16:10.818 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:16:13.326 INFO  nsync.master progress total=  6297 completed=  6285 failed=     0 pending=    12 queue=    10 producers=  0 files=  627650 bytes= 31118116864
+2026-02-03 22:16:15.833 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:16:18.340 INFO  nsync.master progress total=  6408 completed=  6395 failed=     0 pending=    13 queue=    10 producers=  0 files=  638650 bytes= 32543776768
+2026-02-03 22:16:20.844 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:16:25.852 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:16:30.862 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:16:32.656 WARNING nsync.master requeue expired_workers=1 requeued_batches=3
+2026-02-03 22:16:35.872 INFO  nsync.master queue_backpressure depth=    13 threshold=    10
+2026-02-03 22:16:40.881 INFO  nsync.master queue_backpressure depth=    13 threshold=    10
+2026-02-03 22:16:45.891 INFO  nsync.master queue_backpressure depth=    13 threshold=    10
+2026-02-03 22:16:50.900 INFO  nsync.master queue_backpressure depth=    13 threshold=    10
+2026-02-03 22:16:55.909 INFO  nsync.master queue_backpressure depth=    13 threshold=    10
+2026-02-03 22:17:00.917 INFO  nsync.master queue_backpressure depth=    13 threshold=    10
+2026-02-03 22:17:05.925 INFO  nsync.master queue_backpressure depth=    13 threshold=    10
+2026-02-03 22:17:10.933 INFO  nsync.master queue_backpressure depth=    13 threshold=    10
+2026-02-03 22:17:15.942 INFO  nsync.master queue_backpressure depth=    13 threshold=    10
+2026-02-03 22:17:20.951 INFO  nsync.master queue_backpressure depth=    13 threshold=    10
+2026-02-03 22:17:25.959 INFO  nsync.master queue_backpressure depth=    13 threshold=    10
+2026-02-03 22:17:30.968 INFO  nsync.master queue_backpressure depth=    13 threshold=    10
+2026-02-03 22:17:35.976 INFO  nsync.master queue_backpressure depth=    13 threshold=    10
+2026-02-03 22:17:40.986 INFO  nsync.master queue_backpressure depth=    13 threshold=    10
+2026-02-03 22:17:45.995 INFO  nsync.master queue_backpressure depth=    13 threshold=    10
+2026-02-03 22:17:51.003 INFO  nsync.master queue_backpressure depth=    13 threshold=    10
+2026-02-03 22:17:56.010 INFO  nsync.master queue_backpressure depth=    13 threshold=    10
+2026-02-03 22:18:01.019 INFO  nsync.master queue_backpressure depth=    13 threshold=    10
+2026-02-03 22:18:06.028 INFO  nsync.master queue_backpressure depth=    13 threshold=    10
+2026-02-03 22:18:11.037 INFO  nsync.master queue_backpressure depth=    13 threshold=    10
+2026-02-03 22:18:16.045 INFO  nsync.master queue_backpressure depth=    13 threshold=    10
+2026-02-03 22:18:21.053 INFO  nsync.master queue_backpressure depth=    13 threshold=    10
+2026-02-03 22:18:26.061 INFO  nsync.master queue_backpressure depth=    13 threshold=    10
+2026-02-03 22:18:31.071 INFO  nsync.master queue_backpressure depth=    13 threshold=    10
+2026-02-03 22:18:36.079 INFO  nsync.master queue_backpressure depth=    13 threshold=    10
+2026-02-03 22:18:41.087 INFO  nsync.master queue_backpressure depth=    13 threshold=    10
+2026-02-03 22:18:46.095 INFO  nsync.master queue_backpressure depth=    13 threshold=    10
+2026-02-03 22:18:51.103 INFO  nsync.master queue_backpressure depth=    13 threshold=    10
+2026-02-03 22:18:56.112 INFO  nsync.master queue_backpressure depth=    13 threshold=    10
+2026-02-03 22:19:01.120 INFO  nsync.master queue_backpressure depth=    13 threshold=    10
+2026-02-03 22:19:06.131 INFO  nsync.master queue_backpressure depth=    13 threshold=    10
+2026-02-03 22:19:11.139 INFO  nsync.master queue_backpressure depth=    13 threshold=    10
+2026-02-03 22:19:16.148 INFO  nsync.master queue_backpressure depth=    13 threshold=    10
+2026-02-03 22:19:21.157 INFO  nsync.master queue_backpressure depth=    13 threshold=    10
+2026-02-03 22:19:26.165 INFO  nsync.master queue_backpressure depth=    13 threshold=    10
+2026-02-03 22:19:31.175 INFO  nsync.master queue_backpressure depth=    13 threshold=    10
+2026-02-03 22:19:35.289 INFO  nsync.master progress total=  6424 completed=  6409 failed=     0 pending=    15 queue=    10 producers=  0 files=  640050 bytes= 32724355072
+2026-02-03 22:19:36.185 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:19:40.356 INFO  nsync.master progress total=  6613 completed=  6598 failed=     0 pending=    15 queue=    10 producers=  0 files=  658950 bytes= 35199606784
+2026-02-03 22:19:41.203 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:19:45.372 INFO  nsync.master progress total=  6800 completed=  6785 failed=     0 pending=    15 queue=    10 producers=  0 files=  677650 bytes= 36981439488
+2026-02-03 22:19:46.223 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:19:50.388 INFO  nsync.master progress total=  7013 completed=  6998 failed=     0 pending=    15 queue=    10 producers=  0 files=  698950 bytes= 38342875136
+2026-02-03 22:19:51.241 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:19:55.404 INFO  nsync.master progress total=  7190 completed=  7177 failed=     0 pending=    13 queue=    10 producers=  0 files=  716850 bytes= 40402759680
+2026-02-03 22:19:56.257 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:20:00.422 INFO  nsync.master progress total=  7381 completed=  7368 failed=     0 pending=    13 queue=    10 producers=  0 files=  735950 bytes= 42645806080
+2026-02-03 22:20:01.275 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:20:05.440 INFO  nsync.master progress total=  7559 completed=  7546 failed=     0 pending=    13 queue=    10 producers=  0 files=  753750 bytes= 44978900992
+2026-02-03 22:20:06.293 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:20:10.509 INFO  nsync.master progress total=  7747 completed=  7732 failed=     0 pending=    15 queue=    10 producers=  0 files=  772350 bytes= 47405404160
+2026-02-03 22:20:11.312 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:20:15.527 INFO  nsync.master progress total=  7925 completed=  7912 failed=     0 pending=    13 queue=    10 producers=  0 files=  790350 bytes= 49745308672
+2026-02-03 22:20:16.330 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:20:20.544 INFO  nsync.master progress total=  8117 completed=  8103 failed=     0 pending=    14 queue=    10 producers=  0 files=  809450 bytes= 51748935680
+2026-02-03 22:20:21.347 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:20:25.563 INFO  nsync.master progress total=  8306 completed=  8293 failed=     0 pending=    13 queue=    10 producers=  0 files=  828450 bytes= 53735880704
+2026-02-03 22:20:26.366 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:20:30.581 INFO  nsync.master progress total=  8498 completed=  8486 failed=     0 pending=    12 queue=     8 producers=  0 files=  847750 bytes= 55753466880
+2026-02-03 22:20:31.384 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:20:34.295 INFO  nsync.master producer_done count=1
+2026-02-03 22:20:35.599 INFO  nsync.master progress total=  8713 completed=  8700 failed=     0 pending=    13 queue=    10 producers=  1 files=  869079 bytes= 56992204800
+2026-02-03 22:20:36.402 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:20:40.617 INFO  nsync.master progress total=  8962 completed=  8948 failed=     0 pending=    14 queue=    10 producers=  1 files=  893879 bytes= 56992204800
+2026-02-03 22:20:41.420 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:20:42.825 INFO  nsync.master producer_done count=2
+2026-02-03 22:20:42.825 INFO  nsync.master producer_done count=3
+2026-02-03 22:20:42.826 INFO  nsync.master producer_done count=4
+2026-02-03 22:22:08.859 INFO  nsync.master signal signum=2
+2026-02-03 22:23:40.047 INFO  nsync.master scan_start src="/home/mason/workspace/test/src2" scan_depth=3
+2026-02-03 22:23:43.087 INFO  nsync.master scan_complete files=500675
+2026-02-03 22:23:43.144 INFO  nsync.master master_started src="/home/mason/workspace/test/src2" dst="/home/mason/workspace/test/dst" num_master_processes=5 queue_threshold=10
+2026-02-03 22:23:43.236 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:23:43.436 INFO  nsync.master producers_started count=5
+2026-02-03 22:23:45.693 INFO  nsync.master progress total=    13 completed=     1 failed=     0 pending=    12 queue=     9 producers=  0 files=     100 bytes=           0
+2026-02-03 22:23:48.267 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:23:50.710 INFO  nsync.master progress total=   239 completed=   227 failed=     0 pending=    12 queue=     7 producers=  0 files=   22250 bytes=  1048576000
+2026-02-03 22:23:53.284 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:23:55.728 INFO  nsync.master progress total=   488 completed=   476 failed=     0 pending=    12 queue=     9 producers=  0 files=   47150 bytes=  1048576000
+2026-02-03 22:23:58.302 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:24:00.744 INFO  nsync.master progress total=   737 completed=   725 failed=     0 pending=    12 queue=     9 producers=  0 files=   72050 bytes=  1048576000
+2026-02-03 22:24:03.319 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:24:05.762 INFO  nsync.master progress total=   986 completed=   974 failed=     0 pending=    12 queue=     9 producers=  0 files=   96950 bytes=  1048576000
+2026-02-03 22:24:08.337 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:24:10.783 INFO  nsync.master progress total=  1235 completed=  1223 failed=     0 pending=    12 queue=     9 producers=  0 files=  121850 bytes=  1048576000
+2026-02-03 22:24:13.354 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:24:15.801 INFO  nsync.master progress total=  1484 completed=  1472 failed=     0 pending=    12 queue=     9 producers=  0 files=  146750 bytes=  1048576000
+2026-02-03 22:24:18.371 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:24:20.868 INFO  nsync.master progress total=  1733 completed=  1721 failed=     0 pending=    12 queue=     7 producers=  0 files=  171650 bytes=  1048576000
+2026-02-03 22:24:23.388 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:24:25.885 INFO  nsync.master progress total=  1985 completed=  1970 failed=     0 pending=    15 queue=    10 producers=  0 files=  196550 bytes=  1048576000
+2026-02-03 22:24:28.405 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:24:30.953 INFO  nsync.master progress total=  2234 completed=  2222 failed=     0 pending=    12 queue=     7 producers=  0 files=  221750 bytes=  1048576000
+2026-02-03 22:24:33.424 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:24:35.970 INFO  nsync.master progress total=  2483 completed=  2471 failed=     0 pending=    12 queue=     7 producers=  0 files=  246650 bytes=  1048576000
+2026-02-03 22:24:38.444 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:24:40.987 INFO  nsync.master progress total=  2732 completed=  2720 failed=     0 pending=    12 queue=     7 producers=  0 files=  271550 bytes=  1048576000
+2026-02-03 22:24:43.460 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:24:46.004 INFO  nsync.master progress total=  2981 completed=  2969 failed=     0 pending=    12 queue=     7 producers=  0 files=  296450 bytes=  1048576000
+2026-02-03 22:24:48.477 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:24:51.023 INFO  nsync.master progress total=  3230 completed=  3218 failed=     0 pending=    12 queue=     7 producers=  0 files=  321350 bytes=  1048576000
+2026-02-03 22:24:53.495 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:24:56.039 INFO  nsync.master progress total=  3476 completed=  3464 failed=     0 pending=    12 queue=     7 producers=  0 files=  345870 bytes=  1258291200
+2026-02-03 22:24:58.534 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:25:01.049 INFO  nsync.master progress total=  3721 completed=  3707 failed=     0 pending=    14 queue=    10 producers=  0 files=  370170 bytes=  1382099968
+2026-02-03 22:25:03.552 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:25:06.066 INFO  nsync.master progress total=  3940 completed=  3926 failed=     0 pending=    14 queue=    10 producers=  0 files=  391750 bytes=  2800998400
+2026-02-03 22:25:08.571 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:25:11.080 INFO  nsync.master progress total=  4173 completed=  4159 failed=     0 pending=    14 queue=    10 producers=  0 files=  415050 bytes=  3405143040
+2026-02-03 22:25:13.588 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:25:16.097 INFO  nsync.master progress total=  4356 completed=  4342 failed=     0 pending=    14 queue=    10 producers=  0 files=  433350 bytes=  5783580672
+2026-02-03 22:25:18.606 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:25:21.115 INFO  nsync.master progress total=  4534 completed=  4522 failed=     0 pending=    12 queue=    10 producers=  0 files=  451350 bytes=  8124895232
+2026-02-03 22:25:23.625 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:25:26.134 INFO  nsync.master progress total=  4712 completed=  4698 failed=     0 pending=    14 queue=    10 producers=  0 files=  468950 bytes= 10417515520
+2026-02-03 22:25:28.643 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:25:31.153 INFO  nsync.master progress total=  4892 completed=  4879 failed=     0 pending=    13 queue=    10 producers=  0 files=  487050 bytes= 12785754112
+2026-02-03 22:25:33.662 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:25:36.171 INFO  nsync.master progress total=  5072 completed=  5058 failed=     0 pending=    14 queue=    10 producers=  0 files=  504950 bytes= 15117288448
+2026-02-03 22:25:38.681 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:25:41.240 INFO  nsync.master progress total=  5249 completed=  5237 failed=     0 pending=    12 queue=     7 producers=  0 files=  522850 bytes= 17457969152
+2026-02-03 22:25:43.698 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:25:46.257 INFO  nsync.master progress total=  5429 completed=  5415 failed=     0 pending=    14 queue=    10 producers=  0 files=  540650 bytes= 19785966592
+2026-02-03 22:25:48.715 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:25:51.274 INFO  nsync.master progress total=  5615 completed=  5600 failed=     0 pending=    15 queue=    10 producers=  0 files=  559150 bytes= 22202552320
+2026-02-03 22:25:53.732 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:25:56.292 INFO  nsync.master progress total=  5794 completed=  5780 failed=     0 pending=    14 queue=    10 producers=  0 files=  577150 bytes= 24542228480
+2026-02-03 22:25:58.751 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:26:01.457 INFO  nsync.master progress total=  5912 completed=  5899 failed=     0 pending=    13 queue=    10 producers=  0 files=  589050 bytes= 26082513920
+2026-02-03 22:26:03.762 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:26:06.472 INFO  nsync.master progress total=  6054 completed=  6042 failed=     0 pending=    12 queue=    10 producers=  0 files=  603350 bytes= 27941254144
+2026-02-03 22:26:08.782 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:26:11.590 INFO  nsync.master progress total=  6216 completed=  6201 failed=     0 pending=    15 queue=    10 producers=  0 files=  619250 bytes= 30015858688
+2026-02-03 22:26:13.797 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:26:16.603 INFO  nsync.master progress total=  6312 completed=  6299 failed=     0 pending=    13 queue=    10 producers=  0 files=  629050 bytes= 31295905792
+2026-02-03 22:26:18.810 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:26:21.620 INFO  nsync.master progress total=  6482 completed=  6467 failed=     0 pending=    15 queue=    10 producers=  0 files=  645850 bytes= 33487686656
+2026-02-03 22:26:23.826 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:26:26.650 INFO  nsync.master progress total=  6619 completed=  6604 failed=     0 pending=    15 queue=    10 producers=  0 files=  659550 bytes= 35280717824
+2026-02-03 22:26:28.848 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:26:31.663 INFO  nsync.master progress total=  6761 completed=  6746 failed=     0 pending=    15 queue=    10 producers=  0 files=  673750 bytes= 36875945984
+2026-02-03 22:26:33.864 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:26:36.678 INFO  nsync.master progress total=  6969 completed=  6956 failed=     0 pending=    13 queue=    10 producers=  0 files=  694750 bytes= 37801573376
+2026-02-03 22:26:38.878 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:26:41.691 INFO  nsync.master progress total=  7113 completed=  7098 failed=     0 pending=    15 queue=    10 producers=  0 files=  708950 bytes= 39572071424
+2026-02-03 22:26:43.893 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:26:46.707 INFO  nsync.master progress total=  7274 completed=  7261 failed=     0 pending=    13 queue=    10 producers=  0 files=  725250 bytes= 41274482688
+2026-02-03 22:26:48.910 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:26:51.725 INFO  nsync.master progress total=  7432 completed=  7417 failed=     0 pending=    15 queue=    10 producers=  0 files=  740850 bytes= 43287300096
+2026-02-03 22:26:53.924 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:26:56.841 INFO  nsync.master progress total=  7574 completed=  7559 failed=     0 pending=    15 queue=    10 producers=  0 files=  755050 bytes= 45150644224
+2026-02-03 22:26:58.940 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:27:01.906 INFO  nsync.master progress total=  7720 completed=  7708 failed=     0 pending=    12 queue=    10 producers=  0 files=  769950 bytes= 47092147200
+2026-02-03 22:27:03.953 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:27:08.961 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:27:13.970 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:27:15.652 WARNING nsync.master requeue expired_workers=1 requeued_batches=3
+2026-02-03 22:27:18.979 INFO  nsync.master queue_backpressure depth=    13 threshold=    10
+2026-02-03 22:27:23.987 INFO  nsync.master queue_backpressure depth=    13 threshold=    10
+2026-02-03 22:27:28.996 INFO  nsync.master queue_backpressure depth=    13 threshold=    10
+2026-02-03 22:27:34.004 INFO  nsync.master queue_backpressure depth=    13 threshold=    10
+2026-02-03 22:27:34.629 INFO  nsync.master progress total=  7736 completed=  7723 failed=     0 pending=    13 queue=     8 producers=  0 files=  771450 bytes= 47288058880
+2026-02-03 22:27:39.020 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:27:39.646 INFO  nsync.master progress total=  7919 completed=  7907 failed=     0 pending=    12 queue=    10 producers=  0 files=  789850 bytes= 49679597568
+2026-02-03 22:27:44.038 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:27:44.663 INFO  nsync.master progress total=  8110 completed=  8098 failed=     0 pending=    12 queue=     8 producers=  0 files=  808950 bytes= 51698492416
+2026-02-03 22:27:49.056 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:27:49.928 INFO  nsync.master progress total=  8261 completed=  8248 failed=     0 pending=    13 queue=    10 producers=  0 files=  823950 bytes= 53268222976
+2026-02-03 22:27:54.071 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:27:54.946 INFO  nsync.master progress total=  8420 completed=  8408 failed=     0 pending=    12 queue=     8 producers=  0 files=  839950 bytes= 54938755072
+2026-02-03 22:27:59.087 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:28:00.062 INFO  nsync.master progress total=  8584 completed=  8572 failed=     0 pending=    12 queue=     7 producers=  0 files=  856350 bytes= 56650928128
+2026-02-03 22:28:02.498 INFO  nsync.master producer_done count=1
+2026-02-03 22:28:04.103 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:28:05.079 INFO  nsync.master progress total=  8805 completed=  8790 failed=     0 pending=    15 queue=    10 producers=  1 files=  878079 bytes= 57236193280
+2026-02-03 22:28:09.119 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:28:10.098 INFO  nsync.master progress total=  9054 completed=  9039 failed=     0 pending=    15 queue=    10 producers=  1 files=  902979 bytes= 57236193280
+2026-02-03 22:28:13.835 INFO  nsync.master producer_done count=2
+2026-02-03 22:28:13.835 INFO  nsync.master producer_done count=3
+2026-02-03 22:28:13.835 INFO  nsync.master producer_done count=4
+2026-02-03 22:28:13.835 INFO  nsync.master producer_done count=5
+2026-02-03 22:28:24.663 INFO  nsync.master requeue expired_workers=1 requeued_batches=0
+2026-02-03 22:31:08.500 INFO  nsync.master signal signum=2
+2026-02-03 22:32:01.231 INFO  nsync.master scan_start src="/home/mason/workspace/test/src2" scan_depth=3
+2026-02-03 22:32:04.283 INFO  nsync.master scan_complete files=500675
+2026-02-03 22:32:04.330 INFO  nsync.master master_started src="/home/mason/workspace/test/src2" dst="/home/mason/workspace/test/dst" num_master_processes=5 queue_threshold=10
+2026-02-03 22:32:04.486 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:32:04.620 INFO  nsync.master producers_started count=5
+2026-02-03 22:32:08.674 INFO  nsync.master progress total=    13 completed=     1 failed=     0 pending=    12 queue=    10 producers=  0 files=      10 bytes=   104857600
+2026-02-03 22:32:09.531 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:32:13.694 INFO  nsync.master progress total=    55 completed=    42 failed=     0 pending=    13 queue=    10 producers=  0 files=  179740 bytes=  3143617536
+2026-02-03 22:32:14.546 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:32:18.708 INFO  nsync.master progress total=   103 completed=    89 failed=     0 pending=    14 queue=    10 producers=  0 files=  217391 bytes=  8067748864
+2026-02-03 22:32:19.560 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:32:23.727 INFO  nsync.master progress total=   141 completed=   128 failed=     0 pending=    13 queue=    10 producers=  0 files=  338243 bytes= 11420839936
+2026-02-03 22:32:24.580 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:32:28.742 INFO  nsync.master progress total=   178 completed=   164 failed=     0 pending=    14 queue=    10 producers=  0 files=  496644 bytes= 14040424448
+2026-02-03 22:32:29.594 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:32:33.957 INFO  nsync.master progress total=   224 completed=   211 failed=     0 pending=    13 queue=    10 producers=  0 files=  534455 bytes= 18965567488
+2026-02-03 22:32:34.608 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:32:39.571 INFO  nsync.master progress total=   267 completed=   252 failed=     0 pending=    15 queue=    10 producers=  0 files=  571312 bytes= 23261449216
+2026-02-03 22:32:39.621 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:32:44.633 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:32:44.885 INFO  nsync.master progress total=   301 completed=   288 failed=     0 pending=    13 queue=    10 producers=  0 files=  600287 bytes= 27033248768
+2026-02-03 22:32:49.645 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:32:50.048 INFO  nsync.master progress total=   336 completed=   323 failed=     0 pending=    13 queue=    10 producers=  0 files=  632378 bytes= 30700442624
+2026-02-03 22:32:54.657 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:32:56.312 INFO  nsync.master progress total=   367 completed=   353 failed=     0 pending=    14 queue=    10 producers=  0 files=  656367 bytes= 33843580928
+2026-02-03 22:32:59.670 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:33:00.121 INFO  nsync.master producer_done count=1
+2026-02-03 22:33:01.425 INFO  nsync.master progress total=   404 completed=   391 failed=     0 pending=    13 queue=    10 producers=  1 files=  700816 bytes= 37653747712
+2026-02-03 22:33:04.681 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:33:06.736 INFO  nsync.master producer_done count=2
+2026-02-03 22:33:06.737 INFO  nsync.master progress total=   435 completed=   420 failed=     0 pending=    15 queue=    10 producers=  2 files=  724089 bytes= 40691775488
+2026-02-03 22:33:09.692 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:33:11.949 INFO  nsync.master progress total=   461 completed=   447 failed=     0 pending=    14 queue=    10 producers=  2 files=  759224 bytes= 43322750976
+2026-02-03 22:33:14.704 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:33:17.061 INFO  nsync.master progress total=   488 completed=   476 failed=     0 pending=    12 queue=    10 producers=  2 files=  794449 bytes= 46361141248
+2026-02-03 22:33:19.715 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:33:22.073 INFO  nsync.master progress total=   521 completed=   506 failed=     0 pending=    15 queue=    10 producers=  2 files=  818518 bytes= 49504072704
+2026-02-03 22:33:24.727 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:33:28.037 INFO  nsync.master progress total=   553 completed=   541 failed=     0 pending=    12 queue=    10 producers=  2 files=  846691 bytes= 53170796544
+2026-02-03 22:33:29.738 INFO  nsync.master queue_backpressure depth=    10 threshold=    10
+2026-02-03 22:33:33.196 INFO  nsync.master producer_done count=3
+2026-02-03 22:33:33.196 INFO  nsync.master producer_done count=4
+2026-02-03 22:33:33.196 INFO  nsync.master producer_done count=5
+2026-02-03 22:33:33.199 INFO  nsync.master progress total=   585 completed=   571 failed=     0 pending=    14 queue=     9 producers=  5 files=  870687 bytes= 56313807872
+2026-02-03 22:33:48.830 INFO  nsync.master requeue expired_workers=1 requeued_batches=0

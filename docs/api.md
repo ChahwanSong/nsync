@@ -20,7 +20,8 @@ curl -s http://localhost:8000/status | jq
   "completed_batches": 95,
   "failed_batches": 2,
   "queue_depth": 10,
-  "producers_done": 4
+  "producers_done": 4,
+  "producers_total": 4
 }
 ```
 
@@ -31,6 +32,7 @@ curl -s http://localhost:8000/status | jq
 - `failed_batches`: 실패로 종료된 배치 수입니다.
 - `queue_depth`: 현재 배치 큐에 대기 중인 배치 수입니다.
 - `producers_done`: 배치 생성 프로듀서 프로세스 중 완료된 프로세스 수입니다.
+- `producers_total`: 배치 생성 프로듀서 프로세스 총 개수입니다.
 
 ## GET /progress
 
