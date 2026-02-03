@@ -41,8 +41,6 @@ pip install -e .
 - `debug`: 운영 중 이슈 분석이 필요할 때만 활성화합니다.
 - `queue_threshold`: 마스터 배치 큐의 상한입니다. 기본값은 1000입니다.
 - `log_dir/log_prefix`: 로그 파일을 저장할 경로와 파일 접두어를 지정합니다.
-- `compress_paths`: 경로 압축을 활성화합니다. 기본은 비활성화입니다.
-- `compress_max_depth`: 경로 압축 시 최대 디렉터리 깊이입니다. 기본값은 2입니다.
 - `heartbeat_timeout`: 워커 하트비트가 이 시간(초) 이상 끊기면 해당 워커가 클레임한 배치를 재큐잉합니다. 기본값은 15초입니다.
 
 기본값은 `nsync/constants.py`에서 관리하며 `--help`에서도 확인할 수 있습니다.

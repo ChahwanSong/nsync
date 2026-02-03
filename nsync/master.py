@@ -6,6 +6,7 @@ import logging
 import multiprocessing
 import os
 import queue
+import shlex
 import signal
 import socket
 import threading
@@ -26,8 +27,6 @@ from .constants import (
     MAX_RESULT_HISTORY,
     DEFAULT_BATCH_NUM_FILES,
     DEFAULT_BATCH_SIZE,
-    DEFAULT_COMPRESS_MAX_DEPTH,
-    DEFAULT_COMPRESS_PATHS,
     DEFAULT_HEARTBEAT_TIMEOUT,
     DEFAULT_MASTER_API_PORT,
     DEFAULT_MASTER_BATCH_PORT,
@@ -38,6 +37,7 @@ from .constants import (
     DEFAULT_MASTER_SCAN_DEPTH,
     DEFAULT_NUM_MASTER_PROCESSES,
     DEFAULT_QUEUE_THRESHOLD,
+    DEFAULT_RSYNC_ARGS,
     DEFAULT_TIMEZONE,
 )
 
@@ -169,9 +169,8 @@ class MasterConfig:
     debug: bool
     queue_threshold: int
     log_file: Optional[str]
-    compress_paths: bool
-    compress_max_depth: int
     heartbeat_timeout: float
+    rsync_args: List[str]
 
 
 class MasterService:
@@ -383,7 +382,11 @@ class MasterService:
                     batch = self.queue.get_nowait()
                     if self.state.is_completed(batch.task_id):
                         continue
-                    response = {"status": "ok", "batch": batch.to_dict()}
+                    response = {
+                        "status": "ok",
+                        "batch": batch.to_dict(),
+                        "rsync_args": self.config.rsync_args,
+                    }
                     worker_id = request.get("worker_id")
                     if worker_id:
                         self.state.register_in_flight(batch, worker_id)
@@ -674,8 +677,6 @@ def _producer_main(
         files=file_iter(),
         max_files=config.batch_num_files,
         max_bytes=config.batch_size,
-        compress_paths_enabled=config.compress_paths,
-        compress_max_depth=config.compress_max_depth,
     ):
         socket.send(json_dumps({"type": "batch", "batch": batch.to_dict()}))
     socket.send(json_dumps({"type": "producer_done", "bucket": bucket_index}))
@@ -755,13 +756,7 @@ def parse_args() -> MasterConfig:
     parser.add_argument("--log-dir", default="", help="log directory")
     parser.add_argument("--log-prefix", default="", help="log file prefix")
     parser.add_argument(
-        "--compress-paths", action="store_true", help="enable path compression"
-    )
-    parser.add_argument(
-        "--compress-max-depth",
-        type=int,
-        default=DEFAULT_COMPRESS_MAX_DEPTH,
-        help="max directory depth for path compression",
+        "--rsync-args", default=DEFAULT_RSYNC_ARGS, help="extra rsync args for workers"
     )
     parser.add_argument(
         "--heartbeat-timeout",
@@ -788,9 +783,8 @@ def parse_args() -> MasterConfig:
         debug=args.debug,
         queue_threshold=args.queue_threshold,
         log_file=log_file,
-        compress_paths=args.compress_paths or DEFAULT_COMPRESS_PATHS,
-        compress_max_depth=args.compress_max_depth,
         heartbeat_timeout=args.heartbeat_timeout,
+        rsync_args=shlex.split(args.rsync_args),
     )
 
 

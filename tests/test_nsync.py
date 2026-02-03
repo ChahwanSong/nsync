@@ -10,25 +10,12 @@ from pathlib import Path
 import pytest
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
-from nsync.batcher import compress_paths
 
 
 def _free_port() -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.bind(("127.0.0.1", 0))
         return sock.getsockname()[1]
-
-
-def test_compress_paths(tmp_path: Path) -> None:
-    root = tmp_path / "src"
-    root.mkdir()
-    (root / "dir").mkdir()
-    (root / "dir" / "a.txt").write_text("a")
-    (root / "dir" / "b.txt").write_text("b")
-    (root / "other.txt").write_text("c")
-
-    compressed = compress_paths(str(root), ["dir/a.txt", "dir/b.txt"])
-    assert compressed == ["dir"]
 
 
 def test_master_worker_roundtrip(tmp_path: Path) -> None:

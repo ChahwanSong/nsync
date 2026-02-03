@@ -164,8 +164,6 @@ curl -s http://localhost:8000/results | jq
       "retry_count": 0,
       "rsync_exit_code": 0,
       "stats": {
-        "bytes_sent": 0,
-        "bytes_received": 0,
         "start_ts": 1714372000.0,
         "start_ts_iso": "2026-02-02 06:46:40",
         "end_ts": 1714372002.1,

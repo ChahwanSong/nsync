@@ -13,9 +13,7 @@
 - `scan_subtree(root, rel_dir)`는 디렉터리 하위 파일을 재귀적으로 수집합니다.
 - `bucketize(files, num_buckets)`는 순차 라운드 로빈 방식으로 분할합니다.
 - `iter_batches(...)`는 `max_files`, `max_bytes` 기준으로 배치를 스트리밍 생성하고, 파일 수/디렉터리 수/바이트 추정치를 함께 기록합니다.
-- `compress_paths(..., max_depth)`는 경로 압축 최대 깊이를 제한할 수 있습니다.
 - `build_batches(...)`는 `iter_batches(...)`를 리스트로 수집하는 헬퍼입니다.
-- `compress_paths(...)`는 포함 관계를 기반으로 상위 디렉터리로 경로를 축약합니다.
 
 ## 확장 아이디어
 

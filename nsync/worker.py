@@ -184,6 +184,8 @@ class WorkerService:
                 time.sleep(0.01)
                 continue
             batch = response["batch"]
+            if "rsync_args" in response:
+                batch["rsync_args"] = response.get("rsync_args")
             self.logger.debug(
                 "batch_start",
                 {
@@ -212,7 +214,12 @@ class WorkerService:
         retries = 0
         for attempt in range(self.config.retry_limit + 1):
             start_ts = utc_timestamp()
-            exit_code = self._run_rsync(src_base, dst_base, paths)
+            rsync_args = batch.get("rsync_args")
+            if isinstance(rsync_args, str):
+                rsync_args = shlex.split(rsync_args)
+            if rsync_args is None:
+                rsync_args = self.config.rsync_args
+            exit_code = self._run_rsync(src_base, dst_base, paths, rsync_args)
             status = resolve_rsync_exit_code(exit_code)
             if status == "success":
                 break
@@ -232,8 +239,6 @@ class WorkerService:
             "retry_count": retries,
             "rsync_exit_code": exit_code,
             "stats": {
-                "bytes_sent": 0,
-                "bytes_received": 0,
                 "start_ts": start_ts,
                 "end_ts": end_ts,
                 "file_count": file_count,
@@ -257,16 +262,18 @@ class WorkerService:
         )
         return result
 
-    def _run_rsync(self, src_base: str, dst_base: str, paths: List[str]) -> int:
+    def _run_rsync(
+        self, src_base: str, dst_base: str, paths: List[str], rsync_args: List[str]
+    ) -> int:
         dst_host = self.config.dst_host
         local_host = dst_host in {"", "localhost", "127.0.0.1"}
         self._ensure_destinations(dst_host, dst_base, paths)
         cmd = [
             self.config.rsync_bin,
-            "-a",
             "--xattrs",
             "--checksum",
-        ] + self.config.rsync_args
+        ] + rsync_args
+        cmd = self._ensure_rsync_archive_arg(cmd)
         if len(paths) == 1:
             src_path = os.path.join(src_base, paths[0])
             dst_path = (
@@ -291,6 +298,11 @@ class WorkerService:
             return subprocess.call(cmd)
         finally:
             os.unlink(list_path)
+
+    def _ensure_rsync_archive_arg(self, cmd: List[str]) -> List[str]:
+        if "-a" in cmd or "--archive" in cmd:
+            return cmd
+        return [cmd[0], "-a"] + cmd[1:]
 
     def _ensure_destinations(
         self, dst_host: str, dst_base: str, paths: List[str]
@@ -374,6 +386,8 @@ def _format_kv_table(rows: List[tuple[str, str]]) -> str:
     return "\n".join(lines)
 
 
+
+
 def parse_args() -> WorkerConfig:
     parser = argparse.ArgumentParser(
         description="nsync worker",
@@ -407,7 +421,9 @@ def parse_args() -> WorkerConfig:
     )
     parser.add_argument("--rsync-bin", default=DEFAULT_RSYNC_BIN, help="rsync binary")
     parser.add_argument(
-        "--rsync-args", default=DEFAULT_RSYNC_ARGS, help="extra rsync args"
+        "--rsync-args",
+        default=DEFAULT_RSYNC_ARGS,
+        help="extra rsync args (overridden by master --rsync-args)",
     )
     parser.add_argument(
         "--retry-limit",
