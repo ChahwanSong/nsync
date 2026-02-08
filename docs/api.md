@@ -21,7 +21,8 @@ curl -s http://localhost:8000/status | jq
   "failed_batches": 2,
   "queue_depth": 10,
   "producers_done": 4,
-  "producers_total": 4
+  "producers_total": 4,
+  "done": false
 }
 ```
 
@@ -33,6 +34,7 @@ curl -s http://localhost:8000/status | jq
 - `queue_depth`: 현재 배치 큐에 대기 중인 배치 수입니다.
 - `producers_done`: 배치 생성 프로듀서 프로세스 중 완료된 프로세스 수입니다.
 - `producers_total`: 배치 생성 프로듀서 프로세스 총 개수입니다.
+- `done`: 전체 nsync 작업이 종료 상태인지 여부입니다. `--exit-when-done` 플래그로 마스터가 종료되는 조건과 동일합니다.
 
 ## GET /progress
 

@@ -594,6 +594,9 @@ def create_app(
     @app.get("/status")
     def status() -> Dict[str, Any]:
         with state.lock:
+            done = service.done_flag.is_set() and (
+                state.completed_batches + state.failed_batches >= state.total_batches
+            )
             return {
                 "total_batches": state.total_batches,
                 "completed_batches": state.completed_batches,
@@ -601,6 +604,7 @@ def create_app(
                 "queue_depth": queue_ref.qsize(),
                 "producers_done": service.producers_done,
                 "producers_total": service.producers_total,
+                "done": done,
             }
 
     @app.get("/progress")
