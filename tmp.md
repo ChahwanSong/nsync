@@ -39,8 +39,6 @@ curl -s http://localhost:8000/status | jq
 curl -s http://localhost:8000/workers | jq
 curl -s http://localhost:8000/logs | jq
 curl -s http://localhost:8000/results | jq
-
-
 ```
 
 
