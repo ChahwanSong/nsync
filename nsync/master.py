@@ -46,6 +46,7 @@ from .constants import (
     DEFAULT_MASTER_SCAN_DEPTH,
     DEFAULT_NUM_MASTER_PROCESSES,
     DEFAULT_QUEUE_THRESHOLD,
+    DEFAULT_REQUEUE_LIMIT,
     DEFAULT_RSYNC_ARGS,
     DEFAULT_TIMEZONE,
 )
@@ -68,6 +69,8 @@ class MasterState:
     heartbeats: Dict[str, float] = field(default_factory=dict)
     in_flight: Dict[int, "InFlightBatch"] = field(default_factory=dict)
     worker_tasks: Dict[str, Set[int]] = field(default_factory=dict)
+    requeue_counts: Dict[int, int] = field(default_factory=dict)
+    worker_stats: Dict[str, "WorkerAggregate"] = field(default_factory=dict)
     lock: threading.Lock = field(default_factory=threading.Lock)
     max_results: int = MAX_RESULT_HISTORY
 
@@ -88,8 +91,27 @@ class MasterState:
                 self.completed_bytes += int(stats.get("estimated_bytes", 0) or 0)
             else:
                 self.failed_batches += 1
+            if result.worker_id and result.worker_id != "requeue_timeout":
+                stats = result.stats or {}
+                worker_stats = self.worker_stats.setdefault(
+                    result.worker_id, WorkerAggregate()
+                )
+                if result.status == "success":
+                    worker_stats.batches_completed += 1
+                    worker_stats.files_processed += int(
+                        stats.get("file_count", 0) or 0
+                    )
+                    worker_stats.directories_processed += int(
+                        stats.get("directory_count", 0) or 0
+                    )
+                    worker_stats.bytes_processed += int(
+                        stats.get("estimated_bytes", 0) or 0
+                    )
+                else:
+                    worker_stats.batches_failed += 1
             if result.errors:
                 self.errors.extend(result.errors)
+            self.requeue_counts.pop(result.task_id, None)
 
     def record_warning(self, message: str) -> None:
         with self.lock:
@@ -114,6 +136,12 @@ class MasterState:
                 batch=batch, worker_id=worker_id, claimed_ts=time.time()
             )
             self.worker_tasks.setdefault(worker_id, set()).add(batch.task_id)
+
+    def increment_requeue(self, task_id: int) -> int:
+        with self.lock:
+            count = self.requeue_counts.get(task_id, 0) + 1
+            self.requeue_counts[task_id] = count
+            return count
 
     def complete_task(self, task_id: int, worker_id: Optional[str] = None) -> None:
         with self.lock:
@@ -161,6 +189,15 @@ class InFlightBatch:
 
 
 @dataclass
+class WorkerAggregate:
+    batches_completed: int = 0
+    batches_failed: int = 0
+    files_processed: int = 0
+    directories_processed: int = 0
+    bytes_processed: int = 0
+
+
+@dataclass
 class MasterConfig:
     src: str
     dst: str
@@ -179,6 +216,7 @@ class MasterConfig:
     queue_threshold: int
     log_file: Optional[str]
     heartbeat_timeout: float
+    requeue_limit: int
     rsync_args: List[str]
 
 
@@ -424,16 +462,41 @@ class MasterService:
                 self.config.heartbeat_timeout
             )
             if expired_workers:
+                requeued = 0
+                failed = 0
                 for batch in batches:
-                    self._queue_put_front(batch)
+                    requeue_count = self.state.increment_requeue(batch.task_id)
+                    if self.config.requeue_limit >= 0 and requeue_count > self.config.requeue_limit:
+                        failed += 1
+                        result = BatchResult(
+                            worker_id="requeue_timeout",
+                            task_id=batch.task_id,
+                            status="failed",
+                            retry_count=requeue_count,
+                            rsync_exit_code=255,
+                            stats={
+                                "file_count": batch.file_count,
+                                "directory_count": batch.directory_count,
+                                "estimated_bytes": batch.estimated_bytes,
+                            },
+                            errors=[
+                                "requeue_limit_exceeded "
+                                f"limit={self.config.requeue_limit} count={requeue_count}"
+                            ],
+                        )
+                        self.state.record_result(result)
+                    else:
+                        self._queue_put_front(batch)
+                        requeued += 1
                 now = time.time()
                 if now - self.last_requeue_log >= self.requeue_interval:
                     self.last_requeue_log = now
                     log_payload = {
                         "expired_workers": len(expired_workers),
-                        "requeued_batches": len(batches),
+                        "requeued_batches": requeued,
+                        "failed_batches": failed,
                     }
-                    if batches:
+                    if requeued or failed:
                         self.logger.warning("requeue", log_payload)
                     else:
                         self.logger.info("requeue", log_payload)
@@ -470,7 +533,7 @@ class MasterService:
             producers_done = self.producers_done
             start_ts = self.state.start_ts
         elapsed = max(time.time() - start_ts, 0.001)
-        gb_processed = bytes_processed / (1024**3)
+        gbytes_processed = bytes_processed / (1024**3)
         rows = [
             ("elapsed_sec", f"{elapsed:.3f}"),
             ("batches_total", str(total)),
@@ -478,10 +541,10 @@ class MasterService:
             ("batches_failed", str(failed)),
             ("files_processed", str(files_processed)),
             ("bytes_processed", str(bytes_processed)),
-            ("gb_processed", f"{gb_processed:.6f}"),
+            ("gbytes_processed", f"{gbytes_processed:.6f}"),
             ("batches_per_sec", f"{completed / elapsed:.3f}"),
             ("bytes_per_sec", f"{bytes_processed / elapsed:.3f}"),
-            ("gb_per_sec", f"{gb_processed / elapsed:.6f}"),
+            ("gbytes_per_sec", f"{gbytes_processed / elapsed:.6f}"),
             ("files_per_sec", f"{files_processed / elapsed:.3f}"),
             ("queue_depth", str(queue_depth)),
             ("producers_done", str(producers_done)),
@@ -557,7 +620,7 @@ def create_app(
     def throughput() -> Dict[str, Any]:
         with state.lock:
             elapsed = max(time.time() - state.start_ts, 0.001)
-            gb_processed = state.completed_bytes / (1024**3)
+            gbytes_processed = state.completed_bytes / (1024**3)
             return {
                 "batches_per_sec": state.completed_batches / elapsed,
                 "elapsed_sec": elapsed,
@@ -565,9 +628,9 @@ def create_app(
                 "batches_failed": state.failed_batches,
                 "files_processed": state.completed_files,
                 "bytes_processed": state.completed_bytes,
-                "gb_processed": gb_processed,
+                "gbytes_processed": gbytes_processed,
                 "bytes_per_sec": state.completed_bytes / elapsed,
-                "gb_per_sec": gb_processed / elapsed,
+                "gbytes_per_sec": gbytes_processed / elapsed,
                 "files_per_sec": state.completed_files / elapsed,
             }
 
@@ -575,13 +638,85 @@ def create_app(
     def workers() -> Dict[str, Any]:
         timezone = ZoneInfo(DEFAULT_TIMEZONE)
         with state.lock:
+            in_flight_stats: Dict[str, Dict[str, int]] = {}
+            for worker_id, task_ids in state.worker_tasks.items():
+                file_count = 0
+                directory_count = 0
+                estimated_bytes = 0
+                for task_id in task_ids:
+                    inflight = state.in_flight.get(task_id)
+                    if inflight is None:
+                        continue
+                    file_count += inflight.batch.file_count
+                    directory_count += inflight.batch.directory_count
+                    estimated_bytes += inflight.batch.estimated_bytes
+                in_flight_stats[worker_id] = {
+                    "batches_in_flight": len(task_ids),
+                    "files_in_flight": file_count,
+                    "directories_in_flight": directory_count,
+                    "bytes_in_flight": estimated_bytes,
+                }
+            worker_ids = set(state.heartbeats.keys())
+            worker_ids.update(state.worker_stats.keys())
+            worker_ids.update(in_flight_stats.keys())
             return {
                 "heartbeats": {
                     worker_id: datetime.fromtimestamp(
                         timestamp, tz=timezone
                     ).strftime("%Y-%m-%d %H:%M:%S")
                     for worker_id, timestamp in state.heartbeats.items()
-                }
+                },
+                "workers": {
+                    worker_id: {
+                        **in_flight_stats.get(
+                            worker_id,
+                            {
+                                "batches_in_flight": 0,
+                                "files_in_flight": 0,
+                                "directories_in_flight": 0,
+                                "bytes_in_flight": 0,
+                            },
+                        ),
+                        **(
+                            {
+                                "batches_completed": 0,
+                                "batches_failed": 0,
+                                "files_processed": 0,
+                                "directories_processed": 0,
+                                "bytes_processed": 0,
+                            }
+                            if worker_id not in state.worker_stats
+                            else {
+                                "batches_completed": state.worker_stats[
+                                    worker_id
+                                ].batches_completed,
+                                "batches_failed": state.worker_stats[
+                                    worker_id
+                                ].batches_failed,
+                                "files_processed": state.worker_stats[
+                                    worker_id
+                                ].files_processed,
+                                "directories_processed": state.worker_stats[
+                                    worker_id
+                                ].directories_processed,
+                                "bytes_processed": state.worker_stats[
+                                    worker_id
+                                ].bytes_processed,
+                            }
+                        ),
+                        "gbytes_processed": (
+                            state.worker_stats.get(worker_id).bytes_processed
+                            if worker_id in state.worker_stats
+                            else 0
+                        )
+                        / (1024**3),
+                        "gbytes_in_flight": in_flight_stats.get(worker_id, {}).get(
+                            "bytes_in_flight", 0
+                        )
+                        / (1024**3),
+                    }
+                    for worker_id in sorted(worker_ids)
+                },
             }
 
     @app.get("/logs")
@@ -773,6 +908,12 @@ def parse_args() -> MasterConfig:
         default=DEFAULT_HEARTBEAT_TIMEOUT,
         help="heartbeat timeout in seconds before requeue",
     )
+    parser.add_argument(
+        "--requeue-limit",
+        type=int,
+        default=DEFAULT_REQUEUE_LIMIT,
+        help="max requeue attempts before marking batch failed (0 to fail immediately)",
+    )
     args = parser.parse_args(
         coerce_rsync_args_argv(sys.argv[1:], parser._option_string_actions.keys())
     )
@@ -795,6 +936,7 @@ def parse_args() -> MasterConfig:
         queue_threshold=args.queue_threshold,
         log_file=log_file,
         heartbeat_timeout=args.heartbeat_timeout,
+        requeue_limit=max(args.requeue_limit, 0),
         rsync_args=strip_rsync_delete_args(shlex.split(args.rsync_args)),
     )
 

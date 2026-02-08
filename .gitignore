@@ -52,3 +52,6 @@ nsync.egg-info
 
 # venv
 .venv
+
+# log
+*.log

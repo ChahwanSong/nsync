@@ -323,7 +323,7 @@ class WorkerService:
         snapshot = self.stats.snapshot()
         elapsed = max(time.time() - snapshot["start_ts"], 0.001)
         batches_total = snapshot["batches_success"] + snapshot["batches_failed"]
-        gb_processed = snapshot["bytes_processed"] / (1024**3)
+        gbytes_processed = snapshot["bytes_processed"] / (1024**3)
         rows = [
             ("worker_id", self.worker_id),
             ("elapsed_sec", f"{elapsed:.3f}"),
@@ -333,10 +333,10 @@ class WorkerService:
             ("files_processed", str(snapshot["files_processed"])),
             ("directories_processed", str(snapshot["directories_processed"])),
             ("bytes_processed", str(snapshot["bytes_processed"])),
-            ("gb_processed", f"{gb_processed:.6f}"),
+            ("gbytes_processed", f"{gbytes_processed:.6f}"),
             ("batches_per_sec", f"{snapshot['batches_success'] / elapsed:.3f}"),
             ("bytes_per_sec", f"{snapshot['bytes_processed'] / elapsed:.3f}"),
-            ("gb_per_sec", f"{gb_processed / elapsed:.6f}"),
+            ("gbytes_per_sec", f"{gbytes_processed / elapsed:.6f}"),
             ("files_per_sec", f"{snapshot['files_processed'] / elapsed:.3f}"),
             ("directories_per_sec", f"{snapshot['directories_processed'] / elapsed:.3f}"),
         ]

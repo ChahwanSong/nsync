@@ -75,9 +75,9 @@ curl -s http://localhost:8000/throughput | jq
   "batches_failed": 2,
   "files_processed": 12034,
   "bytes_processed": 9876543210,
-  "gb_processed": 9.2,
+  "gbytes_processed": 9.2,
   "bytes_per_sec": 12789012.3,
-  "gb_per_sec": 0.01,
+  "gbytes_per_sec": 0.01,
   "files_per_sec": 155.8
 }
 ```
@@ -90,9 +90,9 @@ curl -s http://localhost:8000/throughput | jq
 - `batches_failed`: 실패한 배치 수입니다.
 - `files_processed`: 완료된 배치 기준 파일 수입니다.
 - `bytes_processed`: 스캔 시 수집한 파일 크기 합계를 기준으로 계산한 바이트 처리량입니다.
-- `gb_processed`: `bytes_processed`를 GiB(1024^3)로 환산한 값입니다.
+- `gbytes_processed`: `bytes_processed`를 GiB(1024^3)로 환산한 값입니다.
 - `bytes_per_sec`: 바이트 처리 속도입니다.
-- `gb_per_sec`: GiB 처리 속도입니다.
+- `gbytes_per_sec`: GiB 처리 속도입니다.
 - `files_per_sec`: 파일 처리 속도입니다.
 
 ## GET /workers
@@ -112,9 +112,40 @@ curl -s http://localhost:8000/workers | jq
   "heartbeats": {
     "worker-a-uuid": "2026-02-02 06:41:51",
     "worker-b-uuid": "2026-02-02 06:41:53"
+  },
+  "workers": {
+    "worker-a-uuid": {
+      "batches_in_flight": 1,
+      "files_in_flight": 120,
+      "directories_in_flight": 5,
+      "bytes_in_flight": 123456789,
+      "gbytes_in_flight": 0.115,
+      "batches_completed": 42,
+      "batches_failed": 1,
+      "files_processed": 8400,
+      "directories_processed": 410,
+      "bytes_processed": 9876543210,
+      "gbytes_processed": 9.200
+    }
   }
 }
 ```
+
+### 필드 설명
+
+- `heartbeats`: 워커별 최근 하트비트 수신 시간을 `Asia/Seoul` 기준 문자열로 반환합니다.
+- `workers`: 워커별 처리 현황을 반환합니다.
+- `batches_in_flight`: 현재 워커가 클레임하고 처리 중인 배치 수입니다.
+- `files_in_flight`: 처리 중인 배치의 파일 수 합계입니다.
+- `directories_in_flight`: 처리 중인 배치의 디렉터리 수 합계입니다.
+- `bytes_in_flight`: 처리 중인 배치의 바이트 합계입니다.
+- `gbytes_in_flight`: `bytes_in_flight`를 GiB(1024^3)로 환산한 값입니다.
+- `batches_completed`: 성공적으로 완료된 배치 수입니다.
+- `batches_failed`: 실패한 배치 수입니다.
+- `files_processed`: 성공적으로 완료된 배치 기준 파일 수입니다.
+- `directories_processed`: 성공적으로 완료된 배치 기준 디렉터리 수입니다.
+- `bytes_processed`: 성공적으로 완료된 배치 기준 바이트 합계입니다.
+- `gbytes_processed`: `bytes_processed`를 GiB(1024^3)로 환산한 값입니다.
 
 ## GET /logs
 
