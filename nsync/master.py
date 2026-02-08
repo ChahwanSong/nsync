@@ -11,6 +11,7 @@ import signal
 import socket
 import threading
 import time
+import sys
 from collections import deque
 from dataclasses import dataclass, field, replace
 from datetime import datetime
@@ -22,7 +23,15 @@ import zmq
 from fastapi import FastAPI
 
 from .batcher import FileInfo, iter_batches, bucketize, scan_paths, scan_subtree
-from .common import Batch, BatchResult, configure_logger, json_loads, json_dumps
+from .common import (
+    Batch,
+    BatchResult,
+    configure_logger,
+    json_loads,
+    json_dumps,
+    coerce_rsync_args_argv,
+    strip_rsync_delete_args,
+)
 from .constants import (
     MAX_RESULT_HISTORY,
     DEFAULT_BATCH_NUM_FILES,
@@ -287,7 +296,7 @@ class MasterService:
                             >= self.backpressure_interval
                         ):
                             self.last_backpressure_log = now
-                            self.logger.info(
+                            self.logger.debug(
                                 "queue_backpressure depth=%6d threshold=%6d"
                                 % (self.queue.qsize(), self.config.queue_threshold)
                             )
@@ -764,7 +773,9 @@ def parse_args() -> MasterConfig:
         default=DEFAULT_HEARTBEAT_TIMEOUT,
         help="heartbeat timeout in seconds before requeue",
     )
-    args = parser.parse_args()
+    args = parser.parse_args(
+        coerce_rsync_args_argv(sys.argv[1:], parser._option_string_actions.keys())
+    )
     log_file = _resolve_log_file(args.log_dir, args.log_prefix, "master")
     return MasterConfig(
         src=args.src,
@@ -784,7 +795,7 @@ def parse_args() -> MasterConfig:
         queue_threshold=args.queue_threshold,
         log_file=log_file,
         heartbeat_timeout=args.heartbeat_timeout,
-        rsync_args=shlex.split(args.rsync_args),
+        rsync_args=strip_rsync_delete_args(shlex.split(args.rsync_args)),
     )
 
 

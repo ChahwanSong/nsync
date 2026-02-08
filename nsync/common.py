@@ -103,6 +103,37 @@ def json_loads(payload: bytes) -> Dict[str, Any]:
     return json.loads(payload.decode("utf-8"))
 
 
+def strip_rsync_delete_args(args: List[str]) -> List[str]:
+    if not args:
+        return []
+    return [arg for arg in args if arg != "--delete"]
+
+
+def coerce_rsync_args_argv(argv: List[str], option_strings: Iterable[str]) -> List[str]:
+    option_set = set(option_strings)
+    coerced: List[str] = []
+    i = 0
+    while i < len(argv):
+        token = argv[i]
+        if token == "--rsync-args":
+            if i + 1 >= len(argv):
+                coerced.append(token)
+                i += 1
+                continue
+            candidate = argv[i + 1]
+            if candidate.startswith("-") and candidate not in option_set:
+                coerced.append(f"--rsync-args={candidate}")
+                i += 2
+                continue
+            coerced.append(token)
+            coerced.append(candidate)
+            i += 2
+            continue
+        coerced.append(token)
+        i += 1
+    return coerced
+
+
 def configure_logger(
     name: str,
     level: int = logging.INFO,

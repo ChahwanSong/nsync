@@ -9,17 +9,20 @@ import subprocess
 import tempfile
 import threading
 import time
+import sys
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 import zmq
 
 from .common import (
+    coerce_rsync_args_argv,
     configure_logger,
     json_dumps,
     json_loads,
     new_worker_id,
     resolve_rsync_exit_code,
+    strip_rsync_delete_args,
     utc_timestamp,
 )
 from .constants import (
@@ -440,7 +443,9 @@ def parse_args() -> WorkerConfig:
     parser.add_argument("--debug", action="store_true", help="enable debug logging")
     parser.add_argument("--log-dir", default="", help="log directory")
     parser.add_argument("--log-prefix", default="", help="log file prefix")
-    args = parser.parse_args()
+    args = parser.parse_args(
+        coerce_rsync_args_argv(sys.argv[1:], parser._option_string_actions.keys())
+    )
     log_file = _resolve_log_file(args.log_dir, args.log_prefix, "worker")
     return WorkerConfig(
         num_worker_processes=args.num_worker_processes,
@@ -450,7 +455,7 @@ def parse_args() -> WorkerConfig:
         result_port=args.result_port,
         heartbeat_port=args.heartbeat_port,
         rsync_bin=args.rsync_bin,
-        rsync_args=shlex.split(args.rsync_args),
+        rsync_args=strip_rsync_delete_args(shlex.split(args.rsync_args)),
         retry_limit=args.retry_limit,
         heartbeat_interval=args.heartbeat_interval,
         debug=args.debug,

@@ -71,7 +71,7 @@ python3 -m nsync.worker \
 python3 -m nsync.master \
   --src /data/src \
   --dst /data/dst \
-  --rsync-args "--delete --atimes"
+  --rsync-args "--atimes"
 ```
 
 운영 환경 기준 설치/배포/보안 고려사항은 [docs/installation.md](docs/installation.md)를 참고하세요.
