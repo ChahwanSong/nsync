@@ -29,7 +29,7 @@ from .common import (
     configure_logger,
     json_loads,
     json_dumps,
-    coerce_rsync_args_argv,
+    coerce_options_argv,
     strip_rsync_delete_args,
 )
 from .constants import (
@@ -904,7 +904,10 @@ def parse_args() -> MasterConfig:
     parser.add_argument("--log-dir", default="", help="log directory")
     parser.add_argument("--log-prefix", default="", help="log file prefix")
     parser.add_argument(
-        "--rsync-args", default=DEFAULT_RSYNC_ARGS, help="extra rsync args for workers"
+        "--options",
+        dest="rsync_args",
+        default=DEFAULT_RSYNC_ARGS,
+        help="extra rsync options for workers",
     )
     parser.add_argument(
         "--heartbeat-timeout",
@@ -919,7 +922,7 @@ def parse_args() -> MasterConfig:
         help="max requeue attempts before marking batch failed (0 to fail immediately)",
     )
     args = parser.parse_args(
-        coerce_rsync_args_argv(sys.argv[1:], parser._option_string_actions.keys())
+        coerce_options_argv(sys.argv[1:], parser._option_string_actions.keys())
     )
     log_file = _resolve_log_file(args.log_dir, args.log_prefix, "master")
     return MasterConfig(

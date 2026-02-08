@@ -109,20 +109,20 @@ def strip_rsync_delete_args(args: List[str]) -> List[str]:
     return [arg for arg in args if arg != "--delete"]
 
 
-def coerce_rsync_args_argv(argv: List[str], option_strings: Iterable[str]) -> List[str]:
+def coerce_options_argv(argv: List[str], option_strings: Iterable[str]) -> List[str]:
     option_set = set(option_strings)
     coerced: List[str] = []
     i = 0
     while i < len(argv):
         token = argv[i]
-        if token == "--rsync-args":
+        if token == "--options":
             if i + 1 >= len(argv):
                 coerced.append(token)
                 i += 1
                 continue
             candidate = argv[i + 1]
             if candidate.startswith("-") and candidate not in option_set:
-                coerced.append(f"--rsync-args={candidate}")
+                coerced.append(f"{token}={candidate}")
                 i += 2
                 continue
             coerced.append(token)

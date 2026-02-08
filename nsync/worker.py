@@ -16,7 +16,7 @@ from typing import Any, Dict, List, Optional
 import zmq
 
 from .common import (
-    coerce_rsync_args_argv,
+    coerce_options_argv,
     configure_logger,
     json_dumps,
     json_loads,
@@ -424,9 +424,10 @@ def parse_args() -> WorkerConfig:
     )
     parser.add_argument("--rsync-bin", default=DEFAULT_RSYNC_BIN, help="rsync binary")
     parser.add_argument(
-        "--rsync-args",
+        "--options",
+        dest="rsync_args",
         default=DEFAULT_RSYNC_ARGS,
-        help="extra rsync args (overridden by master --rsync-args)",
+        help="extra rsync options (overridden by master --options)",
     )
     parser.add_argument(
         "--retry-limit",
@@ -444,7 +445,7 @@ def parse_args() -> WorkerConfig:
     parser.add_argument("--log-dir", default="", help="log directory")
     parser.add_argument("--log-prefix", default="", help="log file prefix")
     args = parser.parse_args(
-        coerce_rsync_args_argv(sys.argv[1:], parser._option_string_actions.keys())
+        coerce_options_argv(sys.argv[1:], parser._option_string_actions.keys())
     )
     log_file = _resolve_log_file(args.log_dir, args.log_prefix, "worker")
     return WorkerConfig(

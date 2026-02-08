@@ -19,7 +19,7 @@ python3 -m nsync.master \
   --queue-threshold 10 \
   --log-dir /home/mason/workspace/nsync \
   --log-prefix abc \
-  --rsync-args "--atimes" \
+  --options "--atimes" \
   --exit-when-done
 ```
 

@@ -65,13 +65,13 @@ python3 -m nsync.worker \
 
 `--debug`를 활성화하면 배치 클레임/결과 처리 등 상세 로그가 출력되며, 워커는 종료 시 처리량 요약을 출력합니다. `--log-dir`와 `--log-prefix`를 지정하면 로그를 파일로 저장할 수 있습니다.
 
-### rsync 추가 인자 예시
+### rsync 옵션 예시
 
 ```bash
 python3 -m nsync.master \
   --src /data/src \
   --dst /data/dst \
-  --rsync-args "--atimes"
+  --options "--atimes"
 ```
 
 운영 환경 기준 설치/배포/보안 고려사항은 [docs/installation.md](docs/installation.md)를 참고하세요.
