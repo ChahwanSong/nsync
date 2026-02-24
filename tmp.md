@@ -23,7 +23,6 @@ python3 -m nsync.master \
   --exit-when-done \
   --no-progress \
   --quiet-fastapi
-
 ```
 
 ## Worker
