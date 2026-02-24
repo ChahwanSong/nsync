@@ -20,7 +20,10 @@ python3 -m nsync.master \
   --log-dir /home/mason/workspace/nsync \
   --log-prefix abc \
   --options "--atimes" \
-  --exit-when-done
+  --exit-when-done \
+  --no-progress \
+  --quiet-fastapi
+
 ```
 
 ## Worker

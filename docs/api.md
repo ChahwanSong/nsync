@@ -34,7 +34,7 @@ curl -s http://localhost:8000/status | jq
 - `queue_depth`: 현재 배치 큐에 대기 중인 배치 수입니다.
 - `producers_done`: 배치 생성 프로듀서 프로세스 중 완료된 프로세스 수입니다.
 - `producers_total`: 배치 생성 프로듀서 프로세스 총 개수입니다.
-- `done`: 전체 nsync 작업이 종료 상태인지 여부입니다. `--exit-when-done` 플래그로 마스터가 종료되는 조건과 동일합니다.
+- `done`: 전체 nsync 작업이 종료 조건에 도달했는지 여부입니다. (프로듀서 완료, 큐 비어 있음, 인플라이트 없음, 완료/실패 배치 합계가 전체 배치 수 이상)
 
 ## GET /progress
 
@@ -99,7 +99,7 @@ curl -s http://localhost:8000/throughput | jq
 
 ## GET /workers
 
-워커 헬스비트 맵을 반환합니다. 값은 `Asia/Seoul` 시간 문자열입니다.
+워커별 헬스비트와 처리 현황을 반환합니다. 시간 값은 `Asia/Seoul` 기준 문자열입니다.
 
 ### 예제 요청
 
@@ -117,6 +117,7 @@ curl -s http://localhost:8000/workers | jq
   },
   "workers": {
     "worker-a-uuid": {
+      "last_heartbeat": "2026-02-02 06:41:51",
       "batches_in_flight": 1,
       "files_in_flight": 120,
       "directories_in_flight": 5,
@@ -135,8 +136,9 @@ curl -s http://localhost:8000/workers | jq
 
 ### 필드 설명
 
-- `heartbeats`: 워커별 최근 하트비트 수신 시간을 `Asia/Seoul` 기준 문자열로 반환합니다.
+- `heartbeats`: 현재 활성 상태(타임아웃 전) 워커의 최근 하트비트 수신 시간을 반환합니다.
 - `workers`: 워커별 처리 현황을 반환합니다.
+- `last_heartbeat`: 해당 워커의 마지막 하트비트 수신 시간입니다. 워커가 타임아웃되어도 마지막 수신 시각은 유지됩니다.
 - `batches_in_flight`: 현재 워커가 클레임하고 처리 중인 배치 수입니다.
 - `files_in_flight`: 처리 중인 배치의 파일 수 합계입니다.
 - `directories_in_flight`: 처리 중인 배치의 디렉터리 수 합계입니다.

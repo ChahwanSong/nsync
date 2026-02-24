@@ -25,4 +25,9 @@
 - 결과 보관 상한은 `nsync/constants.py`의 `MAX_RESULT_HISTORY`로 관리합니다.
 - `--exit-when-done` 모드에서는 완료 시 `master_summary` 테이블을 출력합니다.
 - 하트비트 타임아웃(`heartbeat_timeout`)이 발생하면 해당 워커가 클레임한 배치를 재큐잉합니다.
+- 하트비트 타임아웃 감지 시 워커별 `worker_heartbeat_timeout` WARNING 로그를 출력합니다.
+- Producer의 `producer_done` 메시지가 누락되어도 프로세스 종료를 감시해 완료 수를 보정합니다.
+- Producer가 비정상 종료하면 `producer_exit` WARNING 로그를 출력합니다.
 - 재큐잉은 `requeue_limit` 횟수까지만 수행되며, 초과 시 해당 배치를 실패 처리합니다.
+- 기본적으로 `progress` INFO 로그를 주기적으로 출력하며, `--no-progress`로 비활성화할 수 있습니다.
+- `--quiet-fastapi` 옵션으로 FastAPI(uvicorn) 요청/INFO 로그 출력을 비활성화할 수 있습니다.

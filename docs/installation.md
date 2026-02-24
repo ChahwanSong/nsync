@@ -43,6 +43,8 @@ pip install -e .
 - `log_dir/log_prefix`: 로그 파일을 저장할 경로와 파일 접두어를 지정합니다.
 - `heartbeat_timeout`: 워커 하트비트가 이 시간(초) 이상 끊기면 해당 워커가 클레임한 배치를 재큐잉합니다. 기본값은 15초입니다.
 - `requeue_limit`: 하트비트 타임아웃으로 재큐잉할 수 있는 최대 횟수입니다. 초과 시 해당 배치를 실패 처리합니다. 기본값은 3이며, 0이면 즉시 실패 처리합니다.
+- `no_progress`: Master의 주기적 `progress` INFO 로그를 비활성화합니다. 로그 소음을 줄이고 싶을 때 사용합니다.
+- `quiet_fastapi`: Master의 FastAPI(uvicorn) 요청/INFO 로그 출력을 비활성화합니다.
 
 기본값은 `nsync/constants.py`에서 관리하며 `--help`에서도 확인할 수 있습니다.
 

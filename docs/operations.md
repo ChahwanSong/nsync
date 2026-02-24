@@ -13,7 +13,9 @@
 - Master/Worker 모두 `--debug` 플래그를 제공하며, 배치 수신/클레임/결과 처리 등 주요 이벤트를 상세 로그로 확인할 수 있습니다.
 - 워커는 종료 시점에 처리량 요약 로그(`worker_summary`)를 출력합니다.
 - 기본 로그는 사람이 읽기 쉬운 포맷으로 stdout에 출력됩니다.
-- Master/Worker 모두 주기적으로 `progress` 로그를 INFO 레벨로 출력합니다.
+- 기본적으로 Master/Worker 모두 주기적으로 `progress` 로그를 INFO 레벨로 출력합니다.
+- Master는 `--no-progress` 옵션으로 주기적 `progress` 로그 출력을 비활성화할 수 있습니다.
+- Master는 `--quiet-fastapi` 옵션으로 FastAPI(uvicorn) 요청 로그 출력을 비활성화할 수 있습니다.
 - Master는 `--exit-when-done` 모드에서 완료 시 `master_summary` 테이블을 출력하고 종료합니다.
 
 ## 로그 파일
@@ -31,6 +33,9 @@
 ## 장애 대응
 
 - 워커가 장시간 하트비트를 보내지 않으면 해당 노드 상태를 점검합니다.
+- Master는 하트비트 타임아웃 감지 시 `worker_heartbeat_timeout` WARNING 로그를 출력합니다.
+- Producer 종료 메시지 누락 시에도 Master가 프로세스 종료를 감지해 진행 상태를 정리합니다.
+- Producer 비정상 종료 시 Master는 `producer_exit` WARNING 로그를 출력합니다.
 - `/logs`에서 반복 실패 배치를 확인하고 원인(권한/네트워크/디스크)을 조사합니다.
 - 필요 시 워커를 재기동하여 배치 재시도를 유도합니다.
 - 하트비트 타임아웃 시 해당 워커가 클레임한 배치는 자동으로 재큐잉됩니다.

@@ -67,6 +67,7 @@ class MasterState:
     warnings: List[str] = field(default_factory=list)
     errors: List[str] = field(default_factory=list)
     heartbeats: Dict[str, float] = field(default_factory=dict)
+    last_heartbeats: Dict[str, float] = field(default_factory=dict)
     in_flight: Dict[int, "InFlightBatch"] = field(default_factory=dict)
     worker_tasks: Dict[str, Set[int]] = field(default_factory=dict)
     requeue_counts: Dict[int, int] = field(default_factory=dict)
@@ -123,7 +124,9 @@ class MasterState:
 
     def update_heartbeat(self, worker_id: str) -> None:
         with self.lock:
-            self.heartbeats[worker_id] = time.time()
+            now = time.time()
+            self.heartbeats[worker_id] = now
+            self.last_heartbeats[worker_id] = now
 
     def next_task_id(self) -> int:
         with self.lock:
@@ -159,14 +162,16 @@ class MasterState:
                     if not tasks:
                         self.worker_tasks.pop(worker_id, None)
 
-    def take_timed_out_tasks(self, timeout_sec: float) -> Tuple[List[str], List[Batch]]:
+    def take_timed_out_tasks(
+        self, timeout_sec: float
+    ) -> Tuple[Dict[str, float], List[Batch]]:
         now = time.time()
-        expired_workers: List[str] = []
+        expired_workers: Dict[str, float] = {}
         batches: List[Batch] = []
         with self.lock:
             for worker_id, last_ts in list(self.heartbeats.items()):
                 if now - last_ts > timeout_sec:
-                    expired_workers.append(worker_id)
+                    expired_workers[worker_id] = last_ts
             for worker_id in expired_workers:
                 task_ids = self.worker_tasks.pop(worker_id, set())
                 for task_id in task_ids:
@@ -213,6 +218,8 @@ class MasterConfig:
     api_port: int
     exit_when_done: bool
     debug: bool
+    progress_log_enabled: bool
+    fastapi_output_enabled: bool
     queue_threshold: int
     log_file: Optional[str]
     heartbeat_timeout: float
@@ -233,6 +240,8 @@ class MasterService:
         self.stop_event = threading.Event()
         self.producers_done = 0
         self.producers_total = config.num_master_processes
+        self.producer_lock = threading.Lock()
+        self.completed_producers: Set[int] = set()
         self.done_flag = threading.Event()
         self.last_progress_log = 0.0
         self.progress_interval = 5.0
@@ -242,6 +251,79 @@ class MasterService:
         self.requeue_interval = 5.0
         self.server: Optional[uvicorn.Server] = None
         self.api_thread: Optional[threading.Thread] = None
+
+    def set_producers_total(self, total: int) -> None:
+        with self.producer_lock:
+            self.producers_total = max(total, 0)
+
+    def producer_counts(self) -> Tuple[int, int]:
+        with self.producer_lock:
+            return self.producers_done, self.producers_total
+
+    def mark_producer_done(
+        self,
+        bucket_index: Optional[int],
+        *,
+        source: str,
+        exit_code: Optional[int] = None,
+    ) -> bool:
+        if not isinstance(bucket_index, int):
+            warning_message = (
+                f"producer_done_invalid bucket={bucket_index!r} source={source}"
+            )
+            self.state.record_warning(warning_message)
+            self.logger.warning(
+                "producer_done_invalid",
+                {"bucket": bucket_index, "source": source},
+            )
+            return False
+        with self.producer_lock:
+            if bucket_index in self.completed_producers:
+                return False
+            self.completed_producers.add(bucket_index)
+            self.producers_done = len(self.completed_producers)
+            count = self.producers_done
+            total = self.producers_total
+        if source == "batch_message":
+            self.logger.info(
+                "producer_done", {"bucket": bucket_index, "count": count, "total": total}
+            )
+            return True
+        if exit_code not in (None, 0):
+            warning_message = (
+                f"producer_exit bucket={bucket_index} exit_code={exit_code} source={source}"
+            )
+            self.state.record_warning(warning_message)
+            self.logger.warning(
+                "producer_exit",
+                {
+                    "bucket": bucket_index,
+                    "exit_code": exit_code,
+                    "count": count,
+                    "total": total,
+                    "source": source,
+                },
+            )
+            return True
+        self.logger.info(
+            "producer_done", {"bucket": bucket_index, "count": count, "total": total}
+        )
+        return True
+
+    def is_done(self) -> bool:
+        producers_done, producers_total = self.producer_counts()
+        with self.state.lock:
+            all_batches_finished = (
+                self.state.completed_batches + self.state.failed_batches
+                >= self.state.total_batches
+            )
+            in_flight_empty = not self.state.in_flight
+        return (
+            producers_done >= producers_total
+            and self.queue.empty()
+            and in_flight_empty
+            and all_batches_finished
+        )
 
     def start(self) -> None:
         self._start_batch_receiver()
@@ -295,8 +377,13 @@ class MasterService:
     def _start_api(self) -> None:
         _ensure_port_available(self.config.bind_host, self.config.api_port)
         app = create_app(self.state, self.queue, self)
+        api_log_level = "info" if self.config.fastapi_output_enabled else "warning"
         config = uvicorn.Config(
-            app, host=self.config.bind_host, port=self.config.api_port, log_level="info"
+            app,
+            host=self.config.bind_host,
+            port=self.config.api_port,
+            log_level=api_log_level,
+            access_log=self.config.fastapi_output_enabled,
         )
         self.server = uvicorn.Server(config)
         self.api_thread = threading.Thread(target=self.server.run, daemon=True)
@@ -315,8 +402,9 @@ class MasterService:
                 continue
             message = json_loads(payload)
             if message.get("type") == "producer_done":
-                self.producers_done += 1
-                self.logger.info("producer_done", {"count": self.producers_done})
+                self.mark_producer_done(
+                    message.get("bucket"), source="batch_message"
+                )
                 continue
             if message.get("type") == "batch":
                 batch = Batch(**message["batch"])
@@ -439,68 +527,91 @@ class MasterService:
                         self.state.register_in_flight(batch, worker_id)
                     break
             except queue.Empty:
-                if self.producers_done >= self.producers_total and self.queue.empty():
+                producers_done, producers_total = self.producer_counts()
+                if producers_done >= producers_total and self.queue.empty():
                     self.done_flag.set()
                     response = {"status": "done"}
             socket.send(json_dumps(response))
+            producers_done, _ = self.producer_counts()
             self.logger.debug(
                 "claim",
                 {
                     "worker_id": request.get("worker_id"),
                     "status": response.get("status"),
                     "queue_depth": self.queue.qsize(),
-                    "producers_done": self.producers_done,
+                    "producers_done": producers_done,
                 },
             )
 
     def _requeue_monitor_loop(self) -> None:
         while not self.stop_event.is_set():
-            if self.config.heartbeat_timeout <= 0:
-                time.sleep(1.0)
-                continue
-            expired_workers, batches = self.state.take_timed_out_tasks(
-                self.config.heartbeat_timeout
+            self._process_timed_out_workers()
+            sleep_sec = 1.0 if self.config.heartbeat_timeout <= 0 else 0.5
+            time.sleep(sleep_sec)
+
+    def _process_timed_out_workers(self) -> None:
+        if self.config.heartbeat_timeout <= 0:
+            return
+        expired_workers, batches = self.state.take_timed_out_tasks(
+            self.config.heartbeat_timeout
+        )
+        if not expired_workers:
+            return
+        now = time.time()
+        timezone = ZoneInfo(DEFAULT_TIMEZONE)
+        for worker_id, last_ts in sorted(expired_workers.items()):
+            self.logger.warning(
+                "worker_heartbeat_timeout",
+                {
+                    "worker_id": worker_id,
+                    "last_heartbeat": datetime.fromtimestamp(
+                        last_ts, tz=timezone
+                    ).strftime("%Y-%m-%d %H:%M:%S"),
+                    "elapsed_sec": round(max(now - last_ts, 0.0), 3),
+                    "timeout_sec": self.config.heartbeat_timeout,
+                },
             )
-            if expired_workers:
-                requeued = 0
-                failed = 0
-                for batch in batches:
-                    requeue_count = self.state.increment_requeue(batch.task_id)
-                    if self.config.requeue_limit >= 0 and requeue_count > self.config.requeue_limit:
-                        failed += 1
-                        result = BatchResult(
-                            worker_id="requeue_timeout",
-                            task_id=batch.task_id,
-                            status="failed",
-                            retry_count=requeue_count,
-                            rsync_exit_code=255,
-                            stats={
-                                "file_count": batch.file_count,
-                                "directory_count": batch.directory_count,
-                                "estimated_bytes": batch.estimated_bytes,
-                            },
-                            errors=[
-                                "requeue_limit_exceeded "
-                                f"limit={self.config.requeue_limit} count={requeue_count}"
-                            ],
-                        )
-                        self.state.record_result(result)
-                    else:
-                        self._queue_put_front(batch)
-                        requeued += 1
-                now = time.time()
-                if now - self.last_requeue_log >= self.requeue_interval:
-                    self.last_requeue_log = now
-                    log_payload = {
-                        "expired_workers": len(expired_workers),
-                        "requeued_batches": requeued,
-                        "failed_batches": failed,
-                    }
-                    if requeued or failed:
-                        self.logger.warning("requeue", log_payload)
-                    else:
-                        self.logger.info("requeue", log_payload)
-            time.sleep(0.5)
+        requeued = 0
+        failed = 0
+        for batch in batches:
+            requeue_count = self.state.increment_requeue(batch.task_id)
+            if (
+                self.config.requeue_limit >= 0
+                and requeue_count > self.config.requeue_limit
+            ):
+                failed += 1
+                result = BatchResult(
+                    worker_id="requeue_timeout",
+                    task_id=batch.task_id,
+                    status="failed",
+                    retry_count=requeue_count,
+                    rsync_exit_code=255,
+                    stats={
+                        "file_count": batch.file_count,
+                        "directory_count": batch.directory_count,
+                        "estimated_bytes": batch.estimated_bytes,
+                    },
+                    errors=[
+                        "requeue_limit_exceeded "
+                        f"limit={self.config.requeue_limit} count={requeue_count}"
+                    ],
+                )
+                self.state.record_result(result)
+            else:
+                self._queue_put_front(batch)
+                requeued += 1
+        if now - self.last_requeue_log < self.requeue_interval:
+            return
+        self.last_requeue_log = now
+        log_payload = {
+            "expired_workers": len(expired_workers),
+            "requeued_batches": requeued,
+            "failed_batches": failed,
+        }
+        if requeued or failed:
+            self.logger.warning("requeue", log_payload)
+        else:
+            self.logger.info("requeue", log_payload)
 
     def _queue_put_front(self, batch: Batch) -> None:
         queue_ref = self.queue
@@ -511,13 +622,9 @@ class MasterService:
 
     def wait_until_done(self) -> None:
         while not self.stop_event.is_set():
-            if self.done_flag.is_set():
-                with self.state.lock:
-                    if (
-                        self.state.completed_batches + self.state.failed_batches
-                        >= self.state.total_batches
-                    ):
-                        return
+            if self.is_done():
+                self.done_flag.set()
+                return
             time.sleep(0.1)
 
     def log_summary(self) -> None:
@@ -530,8 +637,8 @@ class MasterService:
             retained_count = len(self.state.results)
             retained_limit = self.state.max_results
             queue_depth = self.queue.qsize()
-            producers_done = self.producers_done
             start_ts = self.state.start_ts
+        producers_done, _ = self.producer_counts()
         elapsed = max(time.time() - start_ts, 0.001)
         gbytes_processed = bytes_processed / (1024**3)
         rows = [
@@ -554,6 +661,8 @@ class MasterService:
         self.logger.info("master_summary\n%s", table)
 
     def _maybe_log_progress(self) -> None:
+        if not self.config.progress_log_enabled:
+            return
         now = time.time()
         if now - self.last_progress_log < self.progress_interval:
             return
@@ -568,9 +677,9 @@ class MasterService:
             completed = self.state.completed_batches
             failed = self.state.failed_batches
             queue_depth = self.queue.qsize()
-            producers_done = self.producers_done
             files_processed = self.state.completed_files
             bytes_processed = self.state.completed_bytes
+        producers_done, _ = self.producer_counts()
         self.logger.info(
             "progress total=%6d completed=%6d failed=%6d pending=%6d queue=%6d producers=%3d files=%8d bytes=%12d"
             % (
@@ -593,19 +702,28 @@ def create_app(
 
     @app.get("/status")
     def status() -> Dict[str, Any]:
+        producers_done, producers_total = service.producer_counts()
         with state.lock:
-            done = service.done_flag.is_set() and (
-                state.completed_batches + state.failed_batches >= state.total_batches
-            )
-            return {
-                "total_batches": state.total_batches,
-                "completed_batches": state.completed_batches,
-                "failed_batches": state.failed_batches,
-                "queue_depth": queue_ref.qsize(),
-                "producers_done": service.producers_done,
-                "producers_total": service.producers_total,
-                "done": done,
-            }
+            total_batches = state.total_batches
+            completed_batches = state.completed_batches
+            failed_batches = state.failed_batches
+            queue_depth = queue_ref.qsize()
+            in_flight_empty = not state.in_flight
+        done = (
+            producers_done >= producers_total
+            and queue_depth == 0
+            and in_flight_empty
+            and (completed_batches + failed_batches >= total_batches)
+        )
+        return {
+            "total_batches": total_batches,
+            "completed_batches": completed_batches,
+            "failed_batches": failed_batches,
+            "queue_depth": queue_depth,
+            "producers_done": producers_done,
+            "producers_total": producers_total,
+            "done": done,
+        }
 
     @app.get("/progress")
     def progress() -> Dict[str, Any]:
@@ -641,6 +759,14 @@ def create_app(
     @app.get("/workers")
     def workers() -> Dict[str, Any]:
         timezone = ZoneInfo(DEFAULT_TIMEZONE)
+
+        def format_timestamp(timestamp: Optional[float]) -> Optional[str]:
+            if not isinstance(timestamp, (int, float)):
+                return None
+            return datetime.fromtimestamp(timestamp, tz=timezone).strftime(
+                "%Y-%m-%d %H:%M:%S"
+            )
+
         with state.lock:
             in_flight_stats: Dict[str, Dict[str, int]] = {}
             for worker_id, task_ids in state.worker_tasks.items():
@@ -661,13 +787,12 @@ def create_app(
                     "bytes_in_flight": estimated_bytes,
                 }
             worker_ids = set(state.heartbeats.keys())
+            worker_ids.update(state.last_heartbeats.keys())
             worker_ids.update(state.worker_stats.keys())
             worker_ids.update(in_flight_stats.keys())
             return {
                 "heartbeats": {
-                    worker_id: datetime.fromtimestamp(
-                        timestamp, tz=timezone
-                    ).strftime("%Y-%m-%d %H:%M:%S")
+                    worker_id: format_timestamp(timestamp)
                     for worker_id, timestamp in state.heartbeats.items()
                 },
                 "workers": {
@@ -718,6 +843,9 @@ def create_app(
                             "bytes_in_flight", 0
                         )
                         / (1024**3),
+                        "last_heartbeat": format_timestamp(
+                            state.last_heartbeats.get(worker_id)
+                        ),
                     }
                     for worker_id in sorted(worker_ids)
                 },
@@ -896,6 +1024,14 @@ def parse_args() -> MasterConfig:
     parser.add_argument("--exit-when-done", action="store_true", help="exit when done")
     parser.add_argument("--debug", action="store_true", help="enable debug logging")
     parser.add_argument(
+        "--no-progress", action="store_true", help="disable periodic progress logs"
+    )
+    parser.add_argument(
+        "--quiet-fastapi",
+        action="store_true",
+        help="disable uvicorn/FastAPI output logs",
+    )
+    parser.add_argument(
         "--queue-threshold",
         type=int,
         default=DEFAULT_QUEUE_THRESHOLD,
@@ -940,6 +1076,8 @@ def parse_args() -> MasterConfig:
         api_port=args.api_port,
         exit_when_done=args.exit_when_done,
         debug=args.debug,
+        progress_log_enabled=not args.no_progress,
+        fastapi_output_enabled=not args.quiet_fastapi,
         queue_threshold=args.queue_threshold,
         log_file=log_file,
         heartbeat_timeout=args.heartbeat_timeout,
@@ -978,8 +1116,22 @@ def main() -> None:
         )
         process.start()
         processes.append(process)
+    service.set_producers_total(len(processes))
     logger.debug("producers_started", {"count": len(processes)})
     logger.info("producers_started", {"count": len(processes)})
+
+    observed_process_exits: Set[int] = set()
+
+    def sync_producer_exits() -> None:
+        for index, process in enumerate(processes):
+            if index in observed_process_exits:
+                continue
+            if process.exitcode is None:
+                continue
+            observed_process_exits.add(index)
+            service.mark_producer_done(
+                index, source="process_exit", exit_code=process.exitcode
+            )
 
     stop_event = threading.Event()
     signal_info: Dict[str, Optional[int]] = {"signum": None}
@@ -995,6 +1147,7 @@ def main() -> None:
     while not stop_event.is_set():
         if service.stop_event.is_set():
             break
+        sync_producer_exits()
         alive = any(process.is_alive() for process in processes)
         if not alive:
             if config.exit_when_done:
@@ -1003,6 +1156,7 @@ def main() -> None:
                 break
         time.sleep(0.2)
 
+    sync_producer_exits()
     for process in processes:
         process.join(timeout=2)
     if signal_info["signum"] is not None:
