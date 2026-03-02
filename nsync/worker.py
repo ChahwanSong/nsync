@@ -22,6 +22,7 @@ from .common import (
     json_loads,
     new_worker_id,
     resolve_rsync_exit_code,
+    resolve_output_file,
     strip_rsync_delete_args,
     utc_timestamp,
 )
@@ -361,17 +362,6 @@ class WorkerService:
         self.logger.info("progress", payload)
 
 
-def _resolve_log_file(log_dir: str, log_prefix: str, name: str) -> Optional[str]:
-    if not log_dir:
-        return None
-    os.makedirs(log_dir, exist_ok=True)
-    prefix = log_prefix or ""
-    if prefix and not prefix.endswith(("-", "_")):
-        prefix = f"{prefix}-"
-    filename = f"{prefix}{name}.log"
-    return os.path.join(log_dir, filename)
-
-
 def _format_kv_table(rows: List[tuple[str, str]]) -> str:
     key_width = max(len("metric"), max((len(key) for key, _ in rows), default=0))
     value_width = max(
@@ -442,12 +432,15 @@ def parse_args() -> WorkerConfig:
         help="heartbeat interval in seconds",
     )
     parser.add_argument("--debug", action="store_true", help="enable debug logging")
-    parser.add_argument("--log-dir", default="", help="log directory")
-    parser.add_argument("--log-prefix", default="", help="log file prefix")
+    parser.add_argument(
+        "--output",
+        default="",
+        help="output path prefix for log files",
+    )
     args = parser.parse_args(
         coerce_options_argv(sys.argv[1:], parser._option_string_actions.keys())
     )
-    log_file = _resolve_log_file(args.log_dir, args.log_prefix, "worker")
+    log_file = resolve_output_file(args.output, "worker", ".log")
     return WorkerConfig(
         num_worker_processes=args.num_worker_processes,
         dst_host=args.dst_host,

@@ -1,3 +1,4 @@
+import multiprocessing
 import queue
 import sys
 import threading
@@ -14,6 +15,7 @@ pytest.importorskip("uvicorn")
 
 import nsync.master as master_module
 from nsync.constants import DEFAULT_TIMEZONE
+from nsync.common import Batch, BatchResult
 from nsync.master import MasterConfig, MasterService, MasterState, create_app, parse_args
 
 
@@ -54,6 +56,7 @@ def _build_config(
         fastapi_output_enabled=fastapi_output_enabled,
         queue_threshold=10000,
         log_file=None,
+        result_file=None,
         heartbeat_timeout=heartbeat_timeout,
         requeue_limit=3,
         rsync_args=[],
@@ -104,6 +107,61 @@ def test_parse_args_quiet_fastapi(
     assert config.fastapi_output_enabled is False
 
 
+def test_parse_args_output_paths(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    src = tmp_path / "src"
+    dst = tmp_path / "dst"
+    src.mkdir()
+    dst.mkdir()
+    output_log = tmp_path / "logs" / "123.log"
+    output_result = tmp_path / "logs" / "123-result.jsonl"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "nsync.master",
+            "--src",
+            str(src),
+            "--dst",
+            str(dst),
+            "--output",
+            str(output_log),
+            "--output-result",
+            str(output_result),
+        ],
+    )
+    config = parse_args()
+    assert config.log_file == str(output_log)
+    assert config.result_file == str(output_result)
+
+
+def test_parse_args_without_output_result_disables_result_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    src = tmp_path / "src"
+    dst = tmp_path / "dst"
+    src.mkdir()
+    dst.mkdir()
+    output_log = tmp_path / "logs" / "123.log"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "nsync.master",
+            "--src",
+            str(src),
+            "--dst",
+            str(dst),
+            "--output",
+            str(output_log),
+        ],
+    )
+    config = parse_args()
+    assert config.log_file == str(output_log)
+    assert config.result_file is None
+
+
 def test_start_api_disables_uvicorn_access_log_when_requested(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -148,6 +206,90 @@ def test_mark_producer_done_deduplicates_sources(tmp_path: Path) -> None:
     service.logger.warning = lambda *_args, **_kwargs: None
     assert service.mark_producer_done(0, source="process_exit", exit_code=1) is True
     assert service.mark_producer_done(0, source="batch_message") is False
+    assert service.producer_counts() == (1, 1)
+
+
+def test_shared_queue_depth_tracks_queue_operations(tmp_path: Path) -> None:
+    service = MasterService(_build_config(tmp_path))
+    shared_depth = multiprocessing.Value("i", 0)
+    service.set_shared_queue_depth(shared_depth)
+    with shared_depth.get_lock():
+        assert int(shared_depth.value) == 0
+
+    batch = Batch(
+        task_id=1,
+        src_base="/src",
+        dst_base="/dst",
+        paths=["a.txt"],
+        file_count=1,
+        directory_count=0,
+        estimated_bytes=1,
+        created_ts=time.time(),
+    )
+    service.queue.put(batch)
+    service._sync_shared_queue_depth()
+    with shared_depth.get_lock():
+        assert int(shared_depth.value) == 1
+
+    _ = service.queue.get_nowait()
+    service._sync_shared_queue_depth()
+    with shared_depth.get_lock():
+        assert int(shared_depth.value) == 0
+
+
+def test_result_output_jsonl_written(tmp_path: Path) -> None:
+    config = _build_config(tmp_path)
+    result_file = tmp_path / "out" / "node-a-master-results.jsonl"
+    result_file.parent.mkdir(parents=True, exist_ok=True)
+    config.result_file = str(result_file)
+    service = MasterService(config)
+    result = BatchResult(
+        worker_id="worker-1",
+        task_id=7,
+        status="success",
+        retry_count=0,
+        rsync_exit_code=0,
+        stats={"file_count": 1, "directory_count": 0, "estimated_bytes": 5},
+        errors=[],
+    )
+    service._write_result_output(result)
+    with service.result_output_lock:
+        service.result_output_file.close()
+        service.result_output_file = None
+    content = result_file.read_text(encoding="utf-8").strip()
+    assert '"task_id": 7' in content
+    assert '"worker_id": "worker-1"' in content
+
+
+def test_note_producer_exit_clean_waits_for_done_message(tmp_path: Path) -> None:
+    service = MasterService(_build_config(tmp_path))
+    service.set_producers_total(1)
+    service.logger.debug = lambda *_args, **_kwargs: None
+    service.note_producer_exit(0, 0)
+    assert service.producer_counts() == (0, 1)
+
+
+def test_note_producer_exit_nonzero_marks_done(tmp_path: Path) -> None:
+    service = MasterService(_build_config(tmp_path))
+    service.set_producers_total(1)
+    service.logger.info = lambda *_args, **_kwargs: None
+    service.logger.warning = lambda *_args, **_kwargs: None
+    service.note_producer_exit(0, 2)
+    assert service.producer_counts() == (1, 1)
+
+
+def test_finalize_missing_producer_done_after_idle(tmp_path: Path) -> None:
+    service = MasterService(_build_config(tmp_path))
+    service.set_producers_total(1)
+    service.logger.debug = lambda *_args, **_kwargs: None
+    service.logger.info = lambda *_args, **_kwargs: None
+    service.logger.warning = lambda *_args, **_kwargs: None
+    service.note_producer_exit(0, 0)
+    with service.state.lock:
+        service.state.total_batches = 3
+        service.state.completed_batches = 3
+    service.last_batch_channel_activity = time.time() - 2.0
+    service.maybe_finalize_missing_producer_done()
     assert service.producer_counts() == (1, 1)
 
 

@@ -49,8 +49,8 @@ python3 -m nsync.master \
   --master-scan-depth 5 \
   --queue-threshold 1000 \
   --debug \
-  --log-dir /var/log/nsync \
-  --log-prefix node-a
+  --output /var/log/nsync/node-a-master.log \
+  --output-result /var/log/nsync/node-a-master-results.jsonl
 ```
 
 ```bash
@@ -59,11 +59,10 @@ python3 -m nsync.worker \
   --dst-host localhost \
   --master-host 127.0.0.1 \
   --debug \
-  --log-dir /var/log/nsync \
-  --log-prefix node-a
+  --output /var/log/nsync/node-a
 ```
 
-`--debug`를 활성화하면 배치 클레임/결과 처리 등 상세 로그가 출력되며, 워커는 종료 시 처리량 요약을 출력합니다. `--log-dir`와 `--log-prefix`를 지정하면 로그를 파일로 저장할 수 있습니다.
+`--debug`를 활성화하면 배치 클레임/결과 처리 등 상세 로그가 출력되며, 워커는 종료 시 처리량 요약을 출력합니다. Master는 `--output`에 지정한 로그 파일에 append하고, `--output-result`를 지정한 경우에만 결과 JSONL을 append합니다.
 
 ### rsync 옵션 예시
 

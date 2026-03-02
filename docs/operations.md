@@ -18,10 +18,11 @@
 - Master는 `--quiet-fastapi` 옵션으로 FastAPI(uvicorn) 요청 로그 출력을 비활성화할 수 있습니다.
 - Master는 `--exit-when-done` 모드에서 완료 시 `master_summary` 테이블을 출력하고 종료합니다.
 
-## 로그 파일
+## 로그/결과 파일
 
-- `--log-dir`와 `--log-prefix`를 지정하면 Master/Worker 로그를 지정 디렉터리에 파일로 남깁니다.
-- 예: `--log-dir /var/log/nsync --log-prefix node-a` → `node-a-master.log`, `node-a-worker.log`
+- Master는 `--output`에 지정한 로그 파일로 append 기록합니다.
+- Master 결과는 `--output-result`를 지정했을 때만 JSONL 파일로 append 기록합니다.
+- Worker 로그는 `--output` 접두어를 사용해 `-worker.log` 파일로 기록합니다.
 
 ## 성능 튜닝 체크리스트
 

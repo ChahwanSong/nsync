@@ -40,7 +40,8 @@ pip install -e .
 - `num_worker_processes`: 워커 노드의 CPU 코어 수와 rsync I/O 병렬성을 고려해 설정합니다.
 - `debug`: 운영 중 이슈 분석이 필요할 때만 활성화합니다.
 - `queue_threshold`: 마스터 배치 큐의 상한입니다. 기본값은 1000입니다.
-- `log_dir/log_prefix`: 로그 파일을 저장할 경로와 파일 접두어를 지정합니다.
+- Master `output`: 로그 파일 경로를 지정합니다. 예: `--output /var/log/nsync/node-a-master.log`
+- Master `output_result`: 결과 JSONL 파일 경로를 지정합니다. 예: `--output-result /var/log/nsync/node-a-master-results.jsonl`
 - `heartbeat_timeout`: 워커 하트비트가 이 시간(초) 이상 끊기면 해당 워커가 클레임한 배치를 재큐잉합니다. 기본값은 15초입니다.
 - `requeue_limit`: 하트비트 타임아웃으로 재큐잉할 수 있는 최대 횟수입니다. 초과 시 해당 배치를 실패 처리합니다. 기본값은 3이며, 0이면 즉시 실패 처리합니다.
 - `no_progress`: Master의 주기적 `progress` INFO 로그를 비활성화합니다. 로그 소음을 줄이고 싶을 때 사용합니다.

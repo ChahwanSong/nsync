@@ -17,12 +17,13 @@ python3 -m nsync.master \
   --num-master-processes 5 \
   --master-scan-depth 3 \
   --queue-threshold 10 \
-  --log-dir /home/mason/workspace/nsync \
-  --log-prefix abc \
-  --options "--atimes" \
+  --output /home/mason/workspace/nsync/123.log \
   --exit-when-done \
   --no-progress \
-  --quiet-fastapi
+  --quiet-fastapi 
+  # --output-result /home/mason/workspace/nsync/123-result.jsonl
+  
+
 ```
 
 ## Worker

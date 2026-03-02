@@ -45,6 +45,7 @@ from .constants import (
     DEFAULT_MASTER_RESULT_PORT,
     DEFAULT_MASTER_SCAN_DEPTH,
     DEFAULT_NUM_MASTER_PROCESSES,
+    DEFAULT_PRODUCER_QUEUE_CHECK_INTERVAL,
     DEFAULT_QUEUE_THRESHOLD,
     DEFAULT_REQUEUE_LIMIT,
     DEFAULT_RSYNC_ARGS,
@@ -99,9 +100,7 @@ class MasterState:
                 )
                 if result.status == "success":
                     worker_stats.batches_completed += 1
-                    worker_stats.files_processed += int(
-                        stats.get("file_count", 0) or 0
-                    )
+                    worker_stats.files_processed += int(stats.get("file_count", 0) or 0)
                     worker_stats.directories_processed += int(
                         stats.get("directory_count", 0) or 0
                     )
@@ -222,6 +221,7 @@ class MasterConfig:
     fastapi_output_enabled: bool
     queue_threshold: int
     log_file: Optional[str]
+    result_file: Optional[str]
     heartbeat_timeout: float
     requeue_limit: int
     rsync_args: List[str]
@@ -242,6 +242,7 @@ class MasterService:
         self.producers_total = config.num_master_processes
         self.producer_lock = threading.Lock()
         self.completed_producers: Set[int] = set()
+        self.exited_producers: Dict[int, int] = {}
         self.done_flag = threading.Event()
         self.last_progress_log = 0.0
         self.progress_interval = 5.0
@@ -249,6 +250,13 @@ class MasterService:
         self.backpressure_interval = 5.0
         self.last_requeue_log = 0.0
         self.requeue_interval = 5.0
+        self.last_batch_channel_activity = time.time()
+        self.producer_done_fallback_grace = 1.0
+        self.shared_queue_depth: Optional[Any] = None
+        self.result_output_file: Optional[Any] = None
+        self.result_output_lock = threading.Lock()
+        if config.result_file:
+            self.result_output_file = open(config.result_file, "a", encoding="utf-8")
         self.server: Optional[uvicorn.Server] = None
         self.api_thread: Optional[threading.Thread] = None
 
@@ -259,6 +267,29 @@ class MasterService:
     def producer_counts(self) -> Tuple[int, int]:
         with self.producer_lock:
             return self.producers_done, self.producers_total
+
+    def set_shared_queue_depth(self, shared_queue_depth: Any) -> None:
+        self.shared_queue_depth = shared_queue_depth
+        self._sync_shared_queue_depth()
+
+    def _sync_shared_queue_depth(self) -> None:
+        shared_queue_depth = self.shared_queue_depth
+        if shared_queue_depth is None:
+            return
+        depth = self.queue.qsize()
+        lock = shared_queue_depth.get_lock()
+        with lock:
+            shared_queue_depth.value = depth
+
+    def _write_result_output(self, result: BatchResult) -> None:
+        line = json_dumps(result.to_dict()).decode("utf-8")
+        with self.result_output_lock:
+            handle = self.result_output_file
+            if handle is None:
+                return
+            handle.write(line)
+            handle.write("\n")
+            handle.flush()
 
     def mark_producer_done(
         self,
@@ -286,13 +317,17 @@ class MasterService:
             total = self.producers_total
         if source == "batch_message":
             self.logger.info(
-                "producer_done", {"bucket": bucket_index, "count": count, "total": total}
+                "producer_done",
+                {
+                    "bucket": bucket_index,
+                    "count": count,
+                    "total": total,
+                    "source": source,
+                },
             )
             return True
         if exit_code not in (None, 0):
-            warning_message = (
-                f"producer_exit bucket={bucket_index} exit_code={exit_code} source={source}"
-            )
+            warning_message = f"producer_exit bucket={bucket_index} exit_code={exit_code} source={source}"
             self.state.record_warning(warning_message)
             self.logger.warning(
                 "producer_exit",
@@ -306,9 +341,59 @@ class MasterService:
             )
             return True
         self.logger.info(
-            "producer_done", {"bucket": bucket_index, "count": count, "total": total}
+            "producer_done",
+            {"bucket": bucket_index, "count": count, "total": total, "source": source},
         )
         return True
+
+    def note_producer_exit(self, bucket_index: int, exit_code: Optional[int]) -> None:
+        with self.producer_lock:
+            self.exited_producers[bucket_index] = 0 if exit_code is None else exit_code
+        if exit_code not in (None, 0):
+            self.mark_producer_done(
+                bucket_index, source="process_exit", exit_code=exit_code
+            )
+            return
+        self.logger.debug(
+            "producer_exit",
+            {"bucket": bucket_index, "exit_code": 0, "source": "process_exit"},
+        )
+
+    def maybe_finalize_missing_producer_done(self) -> None:
+        with self.producer_lock:
+            if len(self.exited_producers) < self.producers_total:
+                return
+            pending = [
+                bucket_index
+                for bucket_index, exit_code in self.exited_producers.items()
+                if bucket_index not in self.completed_producers
+                and exit_code in (None, 0)
+            ]
+        if not pending:
+            return
+        with self.state.lock:
+            all_batches_finished = (
+                self.state.completed_batches + self.state.failed_batches
+                >= self.state.total_batches
+            )
+            in_flight_empty = not self.state.in_flight
+        if not self.queue.empty() or not in_flight_empty or not all_batches_finished:
+            return
+        if (
+            time.time() - self.last_batch_channel_activity
+            < self.producer_done_fallback_grace
+        ):
+            return
+        for bucket_index in sorted(pending):
+            warning_message = (
+                f"producer_done_missing bucket={bucket_index} source=process_exit"
+            )
+            self.state.record_warning(warning_message)
+            self.logger.warning(
+                "producer_done_missing",
+                {"bucket": bucket_index, "source": "process_exit"},
+            )
+            self.mark_producer_done(bucket_index, source="process_exit", exit_code=0)
 
     def is_done(self) -> bool:
         producers_done, producers_total = self.producer_counts()
@@ -318,9 +403,10 @@ class MasterService:
                 >= self.state.total_batches
             )
             in_flight_empty = not self.state.in_flight
+        queue_depth = self.queue.qsize()
         return (
             producers_done >= producers_total
-            and self.queue.empty()
+            and queue_depth == 0
             and in_flight_empty
             and all_batches_finished
         )
@@ -339,6 +425,7 @@ class MasterService:
                 "dst": self.config.dst,
                 "num_master_processes": self.config.num_master_processes,
                 "queue_threshold": self.config.queue_threshold,
+                "exit_when_done": self.config.exit_when_done,
             },
         )
 
@@ -349,6 +436,13 @@ class MasterService:
             self.server.should_exit = True
         if self.api_thread is not None and self.api_thread.is_alive():
             self.api_thread.join(timeout=2)
+        if self.result_output_file is not None:
+            with self.result_output_lock:
+                try:
+                    self.result_output_file.flush()
+                finally:
+                    self.result_output_file.close()
+                self.result_output_file = None
         try:
             self.context.term()
         except zmq.ZMQError:
@@ -400,11 +494,10 @@ class MasterService:
             except zmq.Again:
                 time.sleep(0.05)
                 continue
+            self.last_batch_channel_activity = time.time()
             message = json_loads(payload)
             if message.get("type") == "producer_done":
-                self.mark_producer_done(
-                    message.get("bucket"), source="batch_message"
-                )
+                self.mark_producer_done(message.get("bucket"), source="batch_message")
                 continue
             if message.get("type") == "batch":
                 batch = Batch(**message["batch"])
@@ -430,6 +523,7 @@ class MasterService:
                 self.queue.put(batch)
                 with self.state.lock:
                     self.state.total_batches += 1
+                self._sync_shared_queue_depth()
                 self.logger.debug(
                     "batch_received",
                     {
@@ -466,6 +560,7 @@ class MasterService:
             )
             self.state.complete_task(result.task_id, result.worker_id)
             self.state.record_result(result)
+            self._write_result_output(result)
             self._maybe_log_progress()
             self.logger.debug(
                 "result_received",
@@ -515,6 +610,7 @@ class MasterService:
                 response = {"status": "empty"}
                 while True:
                     batch = self.queue.get_nowait()
+                    self._sync_shared_queue_depth()
                     if self.state.is_completed(batch.task_id):
                         continue
                     response = {
@@ -527,6 +623,7 @@ class MasterService:
                         self.state.register_in_flight(batch, worker_id)
                     break
             except queue.Empty:
+                self.maybe_finalize_missing_producer_done()
                 producers_done, producers_total = self.producer_counts()
                 if producers_done >= producers_total and self.queue.empty():
                     self.done_flag.set()
@@ -597,6 +694,7 @@ class MasterService:
                     ],
                 )
                 self.state.record_result(result)
+                self._write_result_output(result)
             else:
                 self._queue_put_front(batch)
                 requeued += 1
@@ -619,9 +717,11 @@ class MasterService:
             queue_ref.queue.appendleft(batch)
             queue_ref.unfinished_tasks += 1
             queue_ref.not_empty.notify()
+        self._sync_shared_queue_depth()
 
     def wait_until_done(self) -> None:
         while not self.stop_event.is_set():
+            self.maybe_finalize_missing_producer_done()
             if self.is_done():
                 self.done_flag.set()
                 return
@@ -709,12 +809,7 @@ def create_app(
             failed_batches = state.failed_batches
             queue_depth = queue_ref.qsize()
             in_flight_empty = not state.in_flight
-        done = (
-            producers_done >= producers_total
-            and queue_depth == 0
-            and in_flight_empty
-            and (completed_batches + failed_batches >= total_batches)
-        )
+        done = service.is_done()
         return {
             "total_batches": total_batches,
             "completed_batches": completed_batches,
@@ -900,22 +995,19 @@ def _ensure_port_available(
         raise last_error
 
 
-def _resolve_log_file(log_dir: str, log_prefix: str, name: str) -> Optional[str]:
-    if not log_dir:
+def _resolve_output_path(path: str) -> Optional[str]:
+    output = (path or "").strip()
+    if not output:
         return None
-    os.makedirs(log_dir, exist_ok=True)
-    prefix = log_prefix or ""
-    if prefix and not prefix.endswith(("-", "_")):
-        prefix = f"{prefix}-"
-    filename = f"{prefix}{name}.log"
-    return os.path.join(log_dir, filename)
+    parent = os.path.dirname(output)
+    if parent:
+        os.makedirs(parent, exist_ok=True)
+    return output
 
 
 def _format_kv_table(rows: List[tuple[str, str]]) -> str:
     key_width = max(len("metric"), max((len(key) for key, _ in rows), default=0))
-    value_width = max(
-        len("value"), max((len(value) for _, value in rows), default=0)
-    )
+    value_width = max(len("value"), max((len(value) for _, value in rows), default=0))
     sep = f"+-{'-' * key_width}-+-{'-' * value_width}-+"
     lines = [
         sep,
@@ -929,7 +1021,10 @@ def _format_kv_table(rows: List[tuple[str, str]]) -> str:
 
 
 def _producer_main(
-    config: MasterConfig, bucket_index: int, files: List[Dict[str, Any]]
+    config: MasterConfig,
+    bucket_index: int,
+    files: List[Dict[str, Any]],
+    shared_queue_depth: Any,
 ) -> None:
     context = zmq.Context.instance()
     socket = context.socket(zmq.PUSH)
@@ -947,6 +1042,16 @@ def _producer_main(
             else:
                 yield info
 
+    def wait_for_queue_capacity() -> None:
+        if config.queue_threshold <= 0:
+            return
+        while True:
+            with shared_queue_depth.get_lock():
+                queue_depth = int(shared_queue_depth.value)
+            if queue_depth < config.queue_threshold:
+                return
+            time.sleep(DEFAULT_PRODUCER_QUEUE_CHECK_INTERVAL)
+
     for batch in iter_batches(
         config.src,
         config.dst,
@@ -954,6 +1059,7 @@ def _producer_main(
         max_files=config.batch_num_files,
         max_bytes=config.batch_size,
     ):
+        wait_for_queue_capacity()
         socket.send(json_dumps({"type": "batch", "batch": batch.to_dict()}))
     socket.send(json_dumps({"type": "producer_done", "bucket": bucket_index}))
 
@@ -1037,8 +1143,16 @@ def parse_args() -> MasterConfig:
         default=DEFAULT_QUEUE_THRESHOLD,
         help="max queue depth before backpressure",
     )
-    parser.add_argument("--log-dir", default="", help="log directory")
-    parser.add_argument("--log-prefix", default="", help="log file prefix")
+    parser.add_argument(
+        "--output",
+        default="",
+        help="master log output file path",
+    )
+    parser.add_argument(
+        "--output-result",
+        default="",
+        help="master result jsonl output file path",
+    )
     parser.add_argument(
         "--options",
         dest="rsync_args",
@@ -1060,7 +1174,8 @@ def parse_args() -> MasterConfig:
     args = parser.parse_args(
         coerce_options_argv(sys.argv[1:], parser._option_string_actions.keys())
     )
-    log_file = _resolve_log_file(args.log_dir, args.log_prefix, "master")
+    log_file = _resolve_output_path(args.output)
+    result_file = _resolve_output_path(args.output_result)
     return MasterConfig(
         src=args.src,
         dst=args.dst,
@@ -1080,6 +1195,7 @@ def parse_args() -> MasterConfig:
         fastapi_output_enabled=not args.quiet_fastapi,
         queue_threshold=args.queue_threshold,
         log_file=log_file,
+        result_file=result_file,
         heartbeat_timeout=args.heartbeat_timeout,
         requeue_limit=max(args.requeue_limit, 0),
         rsync_args=strip_rsync_delete_args(shlex.split(args.rsync_args)),
@@ -1102,7 +1218,9 @@ def main() -> None:
     logger.info("scan_complete", {"files": len(files)})
     logger.debug("scan_complete", {"files": len(files)})
     buckets = bucketize(files, config.num_master_processes)
+    shared_queue_depth = multiprocessing.Value("i", 0)
     service = MasterService(config)
+    service.set_shared_queue_depth(shared_queue_depth)
     service.start()
 
     processes: List[multiprocessing.Process] = []
@@ -1112,7 +1230,9 @@ def main() -> None:
             for item in bucket
         ]
         process = multiprocessing.Process(
-            target=_producer_main, args=(config, index, payload), daemon=True
+            target=_producer_main,
+            args=(config, index, payload, shared_queue_depth),
+            daemon=True,
         )
         process.start()
         processes.append(process)
@@ -1129,9 +1249,7 @@ def main() -> None:
             if process.exitcode is None:
                 continue
             observed_process_exits.add(index)
-            service.mark_producer_done(
-                index, source="process_exit", exit_code=process.exitcode
-            )
+            service.note_producer_exit(index, process.exitcode)
 
     stop_event = threading.Event()
     signal_info: Dict[str, Optional[int]] = {"signum": None}
@@ -1148,12 +1266,9 @@ def main() -> None:
         if service.stop_event.is_set():
             break
         sync_producer_exits()
-        alive = any(process.is_alive() for process in processes)
-        if not alive:
-            if config.exit_when_done:
-                service.wait_until_done()
-                service.log_summary()
-                break
+        if config.exit_when_done and service.is_done():
+            service.log_summary()
+            break
         time.sleep(0.2)
 
     sync_producer_exits()

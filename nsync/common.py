@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import socket
 import time
 import uuid
@@ -197,6 +198,20 @@ def configure_logger(
         handler.setFormatter(formatter)
     logger.propagate = False
     return logger
+
+
+def resolve_output_file(output: str, suffix: str, extension: str) -> Optional[str]:
+    base = (output or "").strip()
+    if not base:
+        return None
+    base = base.rstrip("/\\")
+    if not base:
+        return None
+    path = f"{base}-{suffix}{extension}"
+    parent = os.path.dirname(path)
+    if parent:
+        os.makedirs(parent, exist_ok=True)
+    return path
 
 
 def chunked(iterable: Iterable[Any], size: int) -> Iterable[List[Any]]:

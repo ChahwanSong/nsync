@@ -21,7 +21,7 @@
 - `--debug` 모드에서는 배치 수신/클레임/결과 처리 로그를 상세하게 출력합니다.
 - 배치 큐는 `queue_threshold` 이상일 경우 잠시 대기하며, 과도한 큐 적재를 방지합니다.
 - `task_id`는 마스터가 큐에 넣는 시점에 순차적으로 부여합니다.
-- 로그 파일 출력은 `--log-dir`, `--log-prefix`로 지정합니다.
+- 로그 파일 출력은 `--output`(파일 경로), 결과 파일 출력은 `--output-result`(jsonl 경로)로 지정합니다.
 - 결과 보관 상한은 `nsync/constants.py`의 `MAX_RESULT_HISTORY`로 관리합니다.
 - `--exit-when-done` 모드에서는 완료 시 `master_summary` 테이블을 출력합니다.
 - 하트비트 타임아웃(`heartbeat_timeout`)이 발생하면 해당 워커가 클레임한 배치를 재큐잉합니다.
