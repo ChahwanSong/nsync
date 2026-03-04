@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import multiprocessing
 import os
 import shlex
 import signal
@@ -10,7 +11,7 @@ import tempfile
 import threading
 import time
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
 import zmq
@@ -40,6 +41,10 @@ from .constants import (
 )
 
 
+ZMQ_REQUEST_TIMEOUT_MS = 3000
+MAX_PROCESS_RESTARTS = 5
+
+
 @dataclass
 class WorkerConfig:
     num_worker_processes: int
@@ -56,37 +61,37 @@ class WorkerConfig:
     log_file: Optional[str]
 
 
-@dataclass
 class WorkerStats:
-    start_ts: float = field(default_factory=time.time)
-    batches_success: int = 0
-    batches_failed: int = 0
-    files_processed: int = 0
-    directories_processed: int = 0
-    bytes_processed: int = 0
-    lock: threading.Lock = field(default_factory=threading.Lock)
+    def __init__(self) -> None:
+        self.start_ts = multiprocessing.Value("d", time.time())
+        self.batches_success = multiprocessing.Value("i", 0)
+        self.batches_failed = multiprocessing.Value("i", 0)
+        self.files_processed = multiprocessing.Value("q", 0)
+        self.directories_processed = multiprocessing.Value("q", 0)
+        self.bytes_processed = multiprocessing.Value("q", 0)
+        self.lock = multiprocessing.Lock()
 
     def record(
         self, status: str, file_count: int, directory_count: int, estimated_bytes: int
     ) -> None:
         with self.lock:
             if status == "success":
-                self.batches_success += 1
-                self.files_processed += file_count
-                self.directories_processed += directory_count
-                self.bytes_processed += estimated_bytes
+                self.batches_success.value += 1
+                self.files_processed.value += file_count
+                self.directories_processed.value += directory_count
+                self.bytes_processed.value += estimated_bytes
             else:
-                self.batches_failed += 1
+                self.batches_failed.value += 1
 
     def snapshot(self) -> Dict[str, Any]:
         with self.lock:
             return {
-                "start_ts": self.start_ts,
-                "batches_success": self.batches_success,
-                "batches_failed": self.batches_failed,
-                "files_processed": self.files_processed,
-                "directories_processed": self.directories_processed,
-                "bytes_processed": self.bytes_processed,
+                "start_ts": float(self.start_ts.value),
+                "batches_success": int(self.batches_success.value),
+                "batches_failed": int(self.batches_failed.value),
+                "files_processed": int(self.files_processed.value),
+                "directories_processed": int(self.directories_processed.value),
+                "bytes_processed": int(self.bytes_processed.value),
             }
 
 
@@ -99,7 +104,7 @@ class WorkerService:
             "nsync.worker", log_level, pretty=True, log_file=config.log_file
         )
         self.context = zmq.Context.instance()
-        self.stop_event = threading.Event()
+        self.stop_event = multiprocessing.Event()
         self.stats = WorkerStats()
         self.last_progress_log = 0.0
         self.progress_interval = 5.0
@@ -115,13 +120,10 @@ class WorkerService:
         )
         heartbeat_thread = threading.Thread(target=self._heartbeat_loop, daemon=True)
         heartbeat_thread.start()
-        processes: List[threading.Thread] = []
+        processes: Dict[int, multiprocessing.Process] = {}
+        restart_counts: Dict[int, int] = {}
         for index in range(self.config.num_worker_processes):
-            thread = threading.Thread(
-                target=self._worker_loop, args=(index,), daemon=True
-            )
-            thread.start()
-            processes.append(thread)
+            processes[index] = self._spawn_worker_process(index)
 
         def handle_signal(signum: int, frame: Optional[Any]) -> None:
             self.logger.info("signal", {"signum": signum})
@@ -132,77 +134,213 @@ class WorkerService:
 
         try:
             while not self.stop_event.is_set():
-                alive = any(thread.is_alive() for thread in processes)
+                alive = False
+                for index, process in list(processes.items()):
+                    if process.is_alive():
+                        alive = True
+                        continue
+                    exit_code = process.exitcode
+                    if self.stop_event.is_set():
+                        continue
+                    if exit_code == 0:
+                        continue
+                    restart_count = restart_counts.get(index, 0) + 1
+                    restart_counts[index] = restart_count
+                    self.logger.warning(
+                        "worker_process_exited",
+                        {
+                            "worker_id": self.worker_id,
+                            "process_index": index,
+                            "exit_code": exit_code,
+                            "restart_count": restart_count,
+                        },
+                    )
+                    if restart_count > MAX_PROCESS_RESTARTS:
+                        self.logger.error(
+                            "worker_process_restart_limit_exceeded",
+                            {
+                                "worker_id": self.worker_id,
+                                "process_index": index,
+                                "max_restarts": MAX_PROCESS_RESTARTS,
+                            },
+                        )
+                        self.stop_event.set()
+                        break
+                    processes[index] = self._spawn_worker_process(index)
+                    alive = True
                 if not alive:
                     break
                 time.sleep(0.2)
         finally:
             self.stop_event.set()
+            for process in processes.values():
+                process.join(timeout=2)
+                if process.is_alive():
+                    process.terminate()
             self._log_summary()
+
+    def _spawn_worker_process(self, index: int) -> multiprocessing.Process:
+        process = multiprocessing.Process(
+            target=self._worker_loop,
+            args=(index,),
+            daemon=True,
+            name=f"nsync-worker-{index}",
+        )
+        process.start()
+        return process
 
     def _heartbeat_loop(self) -> None:
         socket = self.context.socket(zmq.PUSH)
+        socket.setsockopt(zmq.LINGER, 0)
+        socket.setsockopt(zmq.SNDTIMEO, ZMQ_REQUEST_TIMEOUT_MS)
         socket.connect(f"tcp://{self.config.master_host}:{self.config.heartbeat_port}")
-        while not self.stop_event.is_set():
-            payload = {
-                "type": "heartbeat",
-                "worker_id": self.worker_id,
-                "timestamp": utc_timestamp(),
-            }
-            socket.send(json_dumps(payload))
-            time.sleep(self.config.heartbeat_interval)
+        try:
+            while not self.stop_event.is_set():
+                payload = {
+                    "type": "heartbeat",
+                    "worker_id": self.worker_id,
+                    "timestamp": utc_timestamp(),
+                }
+                try:
+                    socket.send(json_dumps(payload))
+                except zmq.ZMQError as exc:
+                    self.logger.warning(
+                        "heartbeat_send_failed",
+                        {"worker_id": self.worker_id, "error": str(exc)},
+                    )
+                self.stop_event.wait(self.config.heartbeat_interval)
+        finally:
+            socket.close(0)
 
     def _worker_loop(self, index: int) -> None:
-        claim_socket = self.context.socket(zmq.REQ)
+        context = zmq.Context()
+        claim_socket = context.socket(zmq.REQ)
+        result_socket = context.socket(zmq.PUSH)
+        claim_socket.setsockopt(zmq.LINGER, 0)
+        claim_socket.setsockopt(zmq.SNDTIMEO, ZMQ_REQUEST_TIMEOUT_MS)
+        claim_socket.setsockopt(zmq.RCVTIMEO, ZMQ_REQUEST_TIMEOUT_MS)
+        result_socket.setsockopt(zmq.LINGER, 0)
+        result_socket.setsockopt(zmq.SNDTIMEO, ZMQ_REQUEST_TIMEOUT_MS)
         claim_socket.connect(
             f"tcp://{self.config.master_host}:{self.config.claim_port}"
         )
-        result_socket = self.context.socket(zmq.PUSH)
         result_socket.connect(
             f"tcp://{self.config.master_host}:{self.config.result_port}"
         )
-        while not self.stop_event.is_set():
-            claim_payload = {
-                "type": "claim",
-                "worker_id": self.worker_id,
-                "pid": os.getpid(),
-                "timestamp": utc_timestamp(),
-                "session_id": self.worker_id,
-            }
-            claim_socket.send(json_dumps(claim_payload))
-            response = json_loads(claim_socket.recv())
-            status = response.get("status")
-            self.logger.debug(
-                "claim_response",
-                {"status": status, "worker_id": self.worker_id, "thread": index},
-            )
-            if status == "empty":
-                time.sleep(0.005)
-                continue
-            if status == "done":
-                self.logger.debug(
-                    "claim_done", {"worker_id": self.worker_id, "thread": index}
-                )
-                break
-            if status != "ok":
-                time.sleep(0.01)
-                continue
-            batch = response["batch"]
-            if "rsync_args" in response:
-                batch["rsync_args"] = response.get("rsync_args")
-            self.logger.debug(
-                "batch_start",
-                {
+        try:
+            while not self.stop_event.is_set():
+                claim_payload = {
+                    "type": "claim",
                     "worker_id": self.worker_id,
-                    "thread": index,
-                    "task_id": batch.get("task_id"),
-                    "file_count": batch.get("file_count"),
-                    "directory_count": batch.get("directory_count"),
-                    "estimated_bytes": batch.get("estimated_bytes"),
-                },
-            )
-            result = self._process_batch(batch)
-            result_socket.send(json_dumps(result))
+                    "pid": os.getpid(),
+                    "timestamp": utc_timestamp(),
+                    "session_id": self.worker_id,
+                }
+                try:
+                    claim_socket.send(json_dumps(claim_payload))
+                    response = json_loads(claim_socket.recv())
+                except zmq.Again:
+                    continue
+                except zmq.ZMQError as exc:
+                    self.logger.warning(
+                        "claim_io_failed",
+                        {
+                            "worker_id": self.worker_id,
+                            "process_index": index,
+                            "pid": os.getpid(),
+                            "error": str(exc),
+                        },
+                    )
+                    time.sleep(0.1)
+                    continue
+                status = response.get("status")
+                self.logger.debug(
+                    "claim_response",
+                    {
+                        "status": status,
+                        "worker_id": self.worker_id,
+                        "process_index": index,
+                        "pid": os.getpid(),
+                    },
+                )
+                if status == "empty":
+                    time.sleep(0.005)
+                    continue
+                if status == "done":
+                    self.logger.debug(
+                        "claim_done",
+                        {
+                            "worker_id": self.worker_id,
+                            "process_index": index,
+                            "pid": os.getpid(),
+                        },
+                    )
+                    break
+                if status != "ok":
+                    time.sleep(0.01)
+                    continue
+                batch = response["batch"]
+                if "rsync_args" in response:
+                    batch["rsync_args"] = response.get("rsync_args")
+                self.logger.debug(
+                    "batch_start",
+                    {
+                        "worker_id": self.worker_id,
+                        "process_index": index,
+                        "pid": os.getpid(),
+                        "task_id": batch.get("task_id"),
+                        "file_count": batch.get("file_count"),
+                        "directory_count": batch.get("directory_count"),
+                        "estimated_bytes": batch.get("estimated_bytes"),
+                    },
+                )
+                try:
+                    result = self._process_batch(batch)
+                except Exception as exc:
+                    self.logger.exception(
+                        "batch_process_failed",
+                        {
+                            "worker_id": self.worker_id,
+                            "process_index": index,
+                            "pid": os.getpid(),
+                            "task_id": batch.get("task_id"),
+                        },
+                    )
+                    result = {
+                        "type": "result",
+                        "worker_id": self.worker_id,
+                        "task_id": batch.get("task_id"),
+                        "status": "failed",
+                        "retry_count": self.config.retry_limit,
+                        "rsync_exit_code": 1,
+                        "stats": {
+                            "start_ts": utc_timestamp(),
+                            "end_ts": utc_timestamp(),
+                            "file_count": int(batch.get("file_count", 0) or 0),
+                            "directory_count": int(batch.get("directory_count", 0) or 0),
+                            "estimated_bytes": int(batch.get("estimated_bytes", 0) or 0),
+                        },
+                        "errors": [f"worker process error: {exc}"],
+                    }
+                try:
+                    result_socket.send(json_dumps(result))
+                except zmq.Again:
+                    continue
+                except zmq.ZMQError as exc:
+                    self.logger.warning(
+                        "result_send_failed",
+                        {
+                            "worker_id": self.worker_id,
+                            "process_index": index,
+                            "pid": os.getpid(),
+                            "task_id": result.get("task_id"),
+                            "error": str(exc),
+                        },
+                    )
+        finally:
+            claim_socket.close(0)
+            result_socket.close(0)
+            context.term()
 
     def _process_batch(self, batch: Dict[str, Any]) -> Dict[str, Any]:
         task_id = batch["task_id"]
@@ -390,7 +528,7 @@ def parse_args() -> WorkerConfig:
         "--num-worker-processes",
         type=int,
         default=DEFAULT_NUM_WORKER_PROCESSES,
-        help="number of worker threads",
+        help="number of worker processes",
     )
     parser.add_argument("--dst-host", default=DEFAULT_DST_HOST, help="destination host")
     parser.add_argument("--master-host", default=DEFAULT_MASTER_HOST, help="master host")
